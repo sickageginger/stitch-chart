@@ -1,0 +1,2610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stitch Chart</title>
+<script>
+// set the theme before first paint so there's no flash of the wrong colors
+(function(){
+  try{
+    var saved = localStorage.getItem('stitchchart:theme');
+    if(saved === 'dark' || saved === 'light') document.documentElement.dataset.theme = saved;
+  } catch(e){ /* localStorage unavailable — fall back to the OS theme */ }
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=JetBrains+Mono:wght@400;500;600&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FFF6F1;
+    --panel:#FFFDFB;
+    --surface:#FFFFFF;
+    --ink:#5A4A47;
+    --ink-soft:#AB958D;
+    --line:#F8E6EA;
+    --thread:#E8879E;
+    --thread-dark:#D46A85;
+    --wax:#F4B860;
+    --good:#8FBF8A;
+    --bad:#EF8C82;
+    --overlay-ink:#3A2C2A; /* fixed dark badge bg for tooltip/toast — stays dark in both themes so white text stays readable */
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#231B1E;
+      --panel:#2E2327;
+      --surface:#3A2C31;
+      --ink:#F3E9E6;
+      --ink-soft:#C7ACA5;
+      --line:#4A383D;
+      --thread:#F0A8BB;
+      --thread-dark:#E17C97;
+      --wax:#F7C878;
+      --good:#9FD49A;
+      --bad:#F2988E;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#231B1E;
+    --panel:#2E2327;
+    --surface:#3A2C31;
+    --ink:#F3E9E6;
+    --ink-soft:#C7ACA5;
+    --line:#4A383D;
+    --thread:#F0A8BB;
+    --thread-dark:#E17C97;
+    --wax:#F7C878;
+    --good:#9FD49A;
+    --bad:#F2988E;
+  }
+  *{box-sizing:border-box;}
+  button{transition:transform .12s ease;}
+  button:active:not(:disabled){transform:scale(0.93);}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    background-image: radial-gradient(var(--line) 1px, transparent 1.6px);
+    background-size: 22px 22px;
+    color:var(--ink);
+    font-family:'Quicksand',system-ui,sans-serif;
+    min-height:100vh;
+  }
+  ::selection{background:var(--thread);color:#fff;}
+
+  h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;margin:0;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  #app{max-width:1180px;margin:0 auto;padding:28px 20px 60px;}
+
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px;padding-bottom:16px;border-bottom:1px solid var(--line);}
+  .titlewrap{display:flex;align-items:center;gap:14px;}
+  .titlewrap.logo-home-btn{border:none;background:none;padding:0;margin:0;text-align:left;cursor:pointer;font:inherit;color:inherit;}
+  .titlewrap.logo-home-btn:hover h1{color:var(--thread);}
+  .titlewrap.logo-home-btn:hover .yarn-icon{animation:wiggle .5s ease;}
+  @keyframes wiggle{
+    0%,100%{transform:rotate(0deg);}
+    25%{transform:rotate(-8deg) scale(1.06);}
+    75%{transform:rotate(8deg) scale(1.06);}
+  }
+  .yarn-icon{flex-shrink:0;}
+  header h1{font-size:1.6rem;letter-spacing:-0.01em;}
+  header p{margin:4px 0 0;color:var(--ink-soft);font-size:0.9rem;}
+  .newproj-btn{
+    background:none;border:1px solid var(--line);color:var(--ink-soft);
+    padding:8px 14px;border-radius:10px;font-size:0.82rem;cursor:pointer;
+    font-family:'Quicksand',sans-serif;white-space:nowrap;
+  }
+  .newproj-btn:hover{border-color:var(--thread);color:var(--thread);}
+  .header-actions{display:flex;gap:10px;flex-shrink:0;}
+
+  /* ---- Setup panel ---- */
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:24px;
+    box-shadow:0 6px 20px rgba(232,135,158,0.1);
+  }
+  .setup-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+  @media (max-width:760px){.setup-grid{grid-template-columns:1fr;}}
+
+  .drop{
+    border:1px dashed var(--line);
+    border-radius:14px;
+    padding:28px 16px;
+    text-align:center;
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+    position:relative;
+    min-height:180px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  }
+  .drop:hover, .drop.drag{border-color:var(--thread);background:rgba(232,135,158,0.12);}
+  .drop img{max-width:100%;max-height:150px;border-radius:9px;object-fit:contain;}
+  .blank-grid-btn{
+    display:block;width:100%;margin-top:10px;padding:9px;border:1px dashed var(--line);border-radius:10px;
+    background:none;color:var(--ink-soft);font-size:0.82rem;cursor:pointer;font-family:'Quicksand',sans-serif;
+  }
+  .blank-grid-btn:hover{border-color:var(--thread);color:var(--thread);}
+  .drop .hint{color:var(--ink-soft);font-size:0.85rem;}
+  .drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;}
+
+  .field{margin-bottom:16px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{display:block;font-size:0.8rem;color:var(--ink-soft);margin-bottom:6px;}
+  .field .row{display:flex;gap:12px;}
+  .field .row > div{flex:1;}
+  input[type=number]{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:10px;
+    font-family:'JetBrains Mono',monospace;font-size:0.95rem;background:var(--surface);color:var(--ink);
+  }
+  input[type=number]:focus{outline:2px solid var(--thread);outline-offset:1px;border-color:var(--thread);}
+  input[type=range]{width:100%;accent-color:var(--thread);}
+  .field select{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:10px;
+    font-family:'JetBrains Mono',monospace;font-size:0.9rem;background:var(--surface);color:var(--ink);
+  }
+  .field select:focus{outline:2px solid var(--thread);outline-offset:1px;border-color:var(--thread);}
+  .checkline{display:flex;align-items:center;gap:8px;font-size:0.87rem;margin-bottom:10px;cursor:pointer;}
+  .checkline input{accent-color:var(--thread);width:16px;height:16px;}
+  .checkline.toolbar-check{margin-bottom:0;color:var(--ink-soft);font-size:0.82rem;}
+  .toolbar-select{
+    padding:7px 9px;border:1px solid var(--line);border-radius:10px;background:var(--surface);
+    font-family:'Quicksand',sans-serif;font-size:0.82rem;color:var(--ink);cursor:pointer;
+  }
+  .toolbar-select:focus{outline:2px solid var(--thread);outline-offset:1px;border-color:var(--thread);}
+  .slidewrap{display:flex;align-items:center;gap:10px;}
+  .slidewrap output{font-family:'JetBrains Mono',monospace;font-size:0.9rem;width:22px;text-align:right;}
+
+  .generate-btn{
+    margin-top:18px;width:100%;padding:13px;border:none;border-radius:12px;
+    background:var(--thread);color:#fff;font-size:0.95rem;font-weight:600;
+    cursor:pointer;font-family:'Quicksand',sans-serif;transition:background .15s, transform .15s;
+  }
+  .generate-btn:hover{background:var(--thread-dark);transform:translateY(-1px);}
+  .generate-btn:disabled{background:var(--line);color:var(--ink-soft);cursor:not-allowed;}
+  .errormsg{color:var(--bad);font-size:0.83rem;margin-top:10px;min-height:1em;}
+
+  /* ---- Chart view ---- */
+  #chartView{display:none;}
+  #chartView.active{display:block;}
+  #setupView.hidden{display:none;}
+
+  /* ---- Home view ---- */
+  #homeView{display:none;}
+  #homeView.active{display:block;}
+  .home-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:18px;}
+  .home-head h2{font-size:1.3rem;}
+
+  .continue-banner{
+    width:100%;display:flex;align-items:center;gap:14px;text-align:left;cursor:pointer;
+    background:var(--panel);border:1px solid var(--thread);border-radius:14px;
+    padding:12px 16px;margin-bottom:18px;font-family:'Quicksand',sans-serif;color:var(--ink);
+    transition:transform .15s, box-shadow .15s;
+  }
+  .continue-banner:hover{transform:translateY(-2px);box-shadow:0 8px 18px rgba(232,135,158,0.22);}
+  .continue-thumb{width:48px;height:48px;border-radius:10px;object-fit:cover;flex-shrink:0;background:var(--paper);}
+  .continue-meta{flex:1;min-width:0;}
+  .continue-label{font-size:0.75rem;color:var(--ink-soft);}
+  .continue-name{font-family:'Fraunces',serif;font-weight:600;font-size:1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .continue-arrow{font-size:1.2rem;color:var(--thread);flex-shrink:0;}
+
+  .fun-banner{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:14px 18px;margin-bottom:18px;display:flex;flex-direction:column;gap:8px;
+  }
+  .fun-fact{font-size:0.82rem;color:var(--ink-soft);}
+  .fun-joke-row{display:flex;align-items:center;gap:10px;}
+  .fun-joke{font-family:'Fraunces',serif;font-size:0.98rem;color:var(--ink);flex:1;}
+  .fun-shuffle-btn{
+    width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);
+    cursor:pointer;font-size:1rem;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    transition:transform .15s, border-color .15s;
+  }
+  .fun-shuffle-btn:hover{border-color:var(--thread);transform:rotate(18deg) scale(1.1);}
+  .folder-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
+  .folder-chip{
+    display:flex;align-items:center;gap:5px;padding:7px 12px;border-radius:20px;
+    border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);
+    font-size:0.83rem;cursor:pointer;font-family:'Quicksand',sans-serif;
+    transition:border-color .15s, color .15s, background .15s;
+  }
+  .folder-chip:hover{border-color:var(--thread);color:var(--thread);}
+  .folder-chip.active{background:var(--thread);border-color:var(--thread);color:#fff;}
+  .folder-chip.active .folder-chip-btn{color:#fff;}
+  .folder-chip-btn{
+    background:none;border:none;padding:0 1px;cursor:pointer;color:var(--ink-soft);
+    font-size:0.78rem;line-height:1;opacity:0.65;
+  }
+  .folder-chip-btn:hover{opacity:1;}
+  .folder-chip-new{border-style:dashed;}
+  .home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;}
+  .home-card{
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;
+    cursor:pointer;text-align:left;display:flex;flex-direction:column;padding:0;
+    font-family:'Quicksand',sans-serif;color:var(--ink);transition:border-color .15s, transform .15s, box-shadow .15s;
+    box-shadow:0 2px 0 rgba(232,135,158,0.12);
+  }
+  .home-card:hover{border-color:var(--thread);transform:translateY(-3px) scale(1.015);box-shadow:0 8px 18px rgba(232,135,158,0.25);}
+  .home-card .thumbwrap{aspect-ratio:1;background:var(--paper);position:relative;overflow:hidden;}
+  .home-card .thumbwrap img{width:100%;height:100%;object-fit:cover;display:block;}
+  .home-card .swatchstrip-big{display:flex;width:100%;height:100%;}
+  .home-card .swatchstrip-big span{flex:1;}
+  .home-card .cardmeta{padding:10px 12px;}
+  .home-card .cardmeta .name{font-family:'Fraunces',serif;font-weight:600;font-size:0.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .home-card .cardmeta .sub{font-size:0.76rem;color:var(--ink-soft);margin-top:2px;}
+  .card-folder-select{
+    margin-top:6px;width:100%;font-size:0.72rem;padding:4px 6px;border-radius:7px;
+    border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);
+    font-family:'Quicksand',sans-serif;cursor:pointer;
+  }
+  .home-card .del-btn{
+    position:absolute;top:6px;right:6px;width:26px;height:26px;border-radius:50%;
+    border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);cursor:pointer;
+    font-size:0.85rem;line-height:1;display:flex;align-items:center;justify-content:center;
+    opacity:0;transition:opacity .15s;
+  }
+  .home-card:hover .del-btn{opacity:1;}
+  .home-card .del-btn:hover{border-color:var(--bad);color:var(--bad);}
+  .home-newcard{border-style:dashed;background:none;align-items:center;}
+  .home-newcard .thumbwrap{display:flex;align-items:center;justify-content:center;font-size:2.2rem;color:var(--ink-soft);background:none;}
+  .home-newcard:hover .thumbwrap{color:var(--thread);}
+  .home-newcard .cardmeta{text-align:center;width:100%;}
+  .home-empty{grid-column:1/-1;color:var(--ink-soft);font-size:0.9rem;padding:30px 4px;text-align:center;}
+
+  .toolbar{
+    position:sticky;top:0;z-index:10;
+    background:var(--paper);
+    padding:12px 0 14px;
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;
+    border-bottom:1px solid var(--line);margin-bottom:18px;
+  }
+  .rownav{display:flex;align-items:center;gap:10px;}
+  .rownav button{
+    width:36px;height:36px;border-radius:12px;border:1px solid var(--line);background:var(--surface);
+    font-size:1.1rem;cursor:pointer;color:var(--ink);
+  }
+  .rownav button:hover{border-color:var(--thread);color:var(--thread);}
+  .rownav button:disabled{opacity:0.35;cursor:not-allowed;}
+  .rownav .rowlabel{font-family:'JetBrains Mono',monospace;font-size:1.05rem;min-width:118px;text-align:center;}
+  .rownav .rowlabel .dir{color:var(--wax);margin-left:6px;}
+  .rownav input[type=number]{width:64px;text-align:center;padding:7px 4px;}
+
+  .zoomctl{display:flex;align-items:center;gap:8px;color:var(--ink-soft);font-size:0.82rem;}
+  .zoomctl input{width:110px;}
+
+  .summary{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:14px 18px;margin-bottom:18px;
+  }
+  .summary-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;}
+  .summary .label{font-size:0.75rem;color:var(--ink-soft);text-transform:none;}
+  .mark-row-btn{
+    padding:5px 11px;border:1px solid var(--line);border-radius:9px;background:var(--surface);
+    font-size:0.76rem;cursor:pointer;color:var(--ink-soft);font-family:'Quicksand',sans-serif;flex-shrink:0;
+  }
+  .mark-row-btn:hover{border-color:var(--thread);color:var(--thread);}
+  .mark-row-btn.done{border-color:var(--good);color:var(--good);}
+  .summary .text{display:flex;flex-wrap:wrap;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:0.98rem;line-height:1.5;}
+  .run-chip{
+    display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer;
+    padding:3px 6px;border-radius:8px;transition:background .15s, opacity .15s;
+  }
+  .run-chip:hover{background:rgba(232,135,158,0.14);}
+  .run-chip .run-swatch{width:14px;height:14px;border-radius:5px;border:1px solid rgba(0,0,0,0.18);flex-shrink:0;}
+  .run-chip b{color:var(--thread);font-weight:600;}
+  .run-chip.done{opacity:0.5;text-decoration:line-through;}
+  .run-chip.done .run-swatch{opacity:0.6;}
+  .run-sep{color:var(--ink-soft);}
+
+  .chartwrap{
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:20px;overflow:auto;
+    display:flex;justify-content:flex-start;
+  }
+  .chart-inner{display:flex;flex-direction:column;}
+  .colnums{display:flex;}
+  .colnums .colspacer{min-width:34px;flex-shrink:0;}
+  .colnum{
+    flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--ink-soft);
+    text-align:center;line-height:1;
+  }
+
+  .rowdir-bar{
+    display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;
+    margin-top:12px;padding:10px 16px;background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  }
+  .rowdir-arrow-btn{
+    width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);
+    color:var(--thread);font-size:1.3rem;font-weight:700;cursor:pointer;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;transition:border-color .15s, transform .15s;
+  }
+  .rowdir-arrow-btn:hover{border-color:var(--thread);transform:scale(1.08);}
+  .rowdir-mode{font-size:0.83rem;color:var(--ink-soft);text-align:center;}
+  .rowdir-mode b{color:var(--ink);font-weight:600;}
+
+  .gridcolumn{display:flex;flex-direction:column-reverse;}
+  .griditem{display:grid;}
+  .rowline{display:flex;align-items:stretch;}
+  .rownum{
+    font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-soft);
+    display:flex;align-items:center;justify-content:flex-end;padding-right:8px;
+    min-width:34px;cursor:pointer;user-select:none;flex-shrink:0;
+  }
+  .rownum:hover{color:var(--thread);}
+  .rownum.current{color:var(--thread);font-weight:600;}
+  .rownum.first{color:var(--good);text-decoration:underline dotted;}
+  .rownum.last{color:var(--wax);text-decoration:underline dotted;}
+  .cellsrow{display:flex;}
+  .cell{flex-shrink:0;border:0.5px solid rgba(0,0,0,0.06);position:relative;cursor:pointer;}
+  .cell:hover{box-shadow:inset 0 0 0 1.5px rgba(0,0,0,0.35);}
+  .cell.marked::after{
+    content:'';position:absolute;top:50%;left:50%;
+    width:44%;height:44%;transform:translate(-50%,-50%);
+    background:rgba(255,255,255,0.9);border:1.5px solid var(--overlay-ink);border-radius:50%;
+  }
+  .rowline.current .cell{outline:1.5px solid var(--thread);outline-offset:-1px;}
+  .rowline.dim .cellsrow{opacity:0.42;}
+  .rowline.current .cellsrow{opacity:1;}
+
+  .legend{
+    margin-top:22px;display:flex;flex-wrap:wrap;gap:10px 22px;
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
+  }
+  .legend h3{font-size:0.85rem;font-weight:500;color:var(--ink-soft);width:100%;margin-bottom:2px;font-family:'Quicksand',sans-serif;}
+  .swatch{display:flex;align-items:center;gap:8px;font-size:0.85rem;}
+  .swatch .chip{width:16px;height:16px;border-radius:5px;border:1px solid rgba(0,0,0,0.15);flex-shrink:0;transition:transform .15s;}
+  .swatch:hover .chip{transform:scale(1.25) rotate(-4deg);}
+  .swatch .letter{font-family:'JetBrains Mono',monospace;font-weight:600;}
+  .swatch .count{color:var(--ink-soft);font-family:'JetBrains Mono',monospace;font-size:0.8rem;}
+
+  .loading{display:flex;align-items:center;gap:10px;color:var(--ink-soft);font-size:0.9rem;margin-top:16px;}
+  .spinner{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--thread);border-radius:50%;animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .aspecthint{font-size:0.75rem;color:var(--ink-soft);margin-top:6px;}
+
+  /* ---- Crop / rotate editor ---- */
+  .cropstage{display:flex;flex-direction:column;gap:10px;}
+  .crop-toolbar{display:flex;gap:8px;flex-wrap:wrap;}
+  .crop-toolbar button{
+    padding:7px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);
+    font-size:0.82rem;cursor:pointer;color:var(--ink);font-family:'Quicksand',sans-serif;
+  }
+  .crop-toolbar button:hover{border-color:var(--thread);color:var(--thread);}
+  .crop-toolbar button.linklike{margin-left:auto;background:none;border-color:transparent;color:var(--ink-soft);text-decoration:underline;}
+  .crop-toolbar button.linklike:hover{color:var(--thread);}
+  .crop-canvas-wrap{
+    position:relative;display:inline-block;max-width:100%;
+    background:#000;border-radius:12px;overflow:hidden;line-height:0;
+    align-self:flex-start;
+  }
+  .crop-canvas-wrap canvas{display:block;max-width:100%;max-height:360px;width:auto;height:auto;touch-action:none;}
+  .croprect{
+    position:absolute;border:2px solid #fff;outline:1px solid var(--thread);
+    box-shadow:0 0 0 9999px rgba(0,0,0,0.55);
+    cursor:move;touch-action:none;
+  }
+  .croprect .handle{
+    position:absolute;width:14px;height:14px;background:#fff;border:2px solid var(--thread);
+    border-radius:5px;touch-action:none;
+  }
+  .croprect .handle.nw{top:-8px;left:-8px;cursor:nwse-resize;}
+  .croprect .handle.ne{top:-8px;right:-8px;cursor:nesw-resize;}
+  .croprect .handle.sw{bottom:-8px;left:-8px;cursor:nesw-resize;}
+  .croprect .handle.se{bottom:-8px;right:-8px;cursor:nwse-resize;}
+  .cropHint{font-size:0.78rem;color:var(--ink-soft);}
+
+  /* ---- Resize (add row/column) panel ---- */
+  .resize-panel{
+    margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:16px 18px;
+  }
+  .resize-panel h3{font-size:0.85rem;font-weight:500;color:var(--ink-soft);margin-bottom:12px;font-family:'Quicksand',sans-serif;}
+  .resize-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+  .resize-row label{font-size:0.85rem;color:var(--ink-soft);}
+  .resize-row select{
+    padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);
+    font-family:'JetBrains Mono',monospace;font-size:0.88rem;color:var(--ink);
+  }
+  .resize-row input[type=number]{
+    width:64px;text-align:center;padding:7px 4px;border:1px solid var(--line);border-radius:10px;
+    font-family:'JetBrains Mono',monospace;font-size:0.88rem;background:var(--surface);color:var(--ink);
+  }
+  .resize-buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  @media (max-width:640px){.resize-buttons{grid-template-columns:1fr 1fr;}}
+  .resize-buttons button{
+    padding:9px 8px;border:1px solid var(--line);border-radius:10px;background:var(--surface);
+    font-size:0.82rem;cursor:pointer;color:var(--ink);font-family:'Quicksand',sans-serif;
+  }
+  .resize-buttons button:hover{border-color:var(--thread);color:var(--thread);}
+  .resize-buttons.mode-remove button{border-color:var(--bad);color:var(--bad);}
+  .resize-buttons.mode-remove button:hover{background:var(--bad);color:#fff;}
+
+  .resize-mode-toggle{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .resize-mode-toggle .mode-btn{
+    padding:7px 14px;border:none;background:var(--surface);font-size:0.82rem;cursor:pointer;
+    color:var(--ink-soft);font-family:'Quicksand',sans-serif;
+  }
+  .resize-mode-toggle .mode-btn + .mode-btn{border-left:1px solid var(--line);}
+  .resize-mode-toggle .mode-btn.active{background:var(--thread);color:#fff;}
+
+  /* ---- Milestone note + decorative divider ---- */
+  .milestone{font-size:0.85rem;color:var(--wax);font-weight:500;margin:-10px 0 16px;min-height:1.2em;}
+  .stitchdivider{
+    height:9px;margin:4px 0 20px;
+    background-image:radial-gradient(circle, var(--line) 32%, transparent 33%);
+    background-size:13px 9px;background-repeat:repeat-x;background-position:center;
+  }
+
+  /* ---- Stitch tooltip ---- */
+  .stitch-tooltip{
+    position:fixed;transform:translate(-50%,-100%);
+    background:var(--overlay-ink);color:#fff;padding:6px 11px;border-radius:10px;
+    font-family:'JetBrains Mono',monospace;font-size:0.76rem;white-space:nowrap;
+    pointer-events:none;z-index:200;box-shadow:0 4px 14px rgba(0,0,0,0.25);
+  }
+
+  /* ---- Chosen image card ---- */
+  .chosen-card{
+    margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:14px;
+    background:var(--surface);display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+  }
+  .chosen-card canvas{max-width:110px;max-height:110px;border-radius:9px;display:block;box-shadow:0 1px 5px rgba(0,0,0,0.18);}
+  .chosen-actions{display:flex;flex-direction:column;gap:8px;}
+  .chosen-actions button{
+    padding:7px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);
+    font-size:0.82rem;cursor:pointer;color:var(--ink);font-family:'Quicksand',sans-serif;text-align:left;
+  }
+  .chosen-actions button:hover{border-color:var(--thread);color:var(--thread);}
+  .chosen-actions button.linklike{border-color:transparent;text-decoration:underline;color:var(--ink-soft);background:none;}
+
+  /* ---- Crop / rotate modal ---- */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(30,22,18,0.68);
+    display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;
+  }
+  .modal-panel{
+    background:var(--panel);border-radius:18px;padding:22px;
+    max-width:640px;width:100%;max-height:90vh;overflow:auto;
+    box-shadow:0 24px 70px rgba(0,0,0,0.35);
+  }
+  .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .modal-close{background:none;border:none;font-size:1.5rem;line-height:1;cursor:pointer;color:var(--ink-soft);padding:0 4px;}
+  .modal-close:hover{color:var(--thread);}
+  .modal-panel .crop-canvas-wrap canvas{max-height:56vh;}
+
+  /* ---- Project name + save status ---- */
+  .project-row{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px;}
+
+  .progress-wrap{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .progress-track{flex:1;height:10px;background:var(--line);border-radius:6px;overflow:hidden;}
+  .progress-fill{height:100%;width:0%;background:var(--thread);border-radius:6px;transition:width .25s ease;}
+  .progress-label{font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--ink-soft);min-width:36px;text-align:right;flex-shrink:0;}
+
+  .about-panel{
+    display:none;margin-bottom:16px;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:16px 18px;
+  }
+  .about-panel.open{display:block;}
+  .about-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:14px;}
+  @media (max-width:760px){.about-grid{grid-template-columns:1fr;}}
+  .about-panel input[type=text], .about-panel textarea{
+    width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:10px;
+    font-family:'Quicksand',sans-serif;font-size:0.9rem;background:var(--surface);color:var(--ink);
+    resize:vertical;
+  }
+  .about-panel input[type=text]:focus, .about-panel textarea:focus{outline:2px solid var(--thread);outline-offset:1px;border-color:var(--thread);}
+  .project-name-input{
+    font-family:'Fraunces',serif;font-size:1.2rem;font-weight:600;color:var(--ink);
+    border:none;background:none;padding:2px 3px;border-bottom:1px dashed transparent;
+    min-width:120px;max-width:100%;
+  }
+  .project-name-input:hover, .project-name-input:focus{border-bottom-color:var(--line);outline:none;}
+  .save-status{font-size:0.76rem;color:var(--ink-soft);transition:opacity .2s;}
+  .save-status.error{color:var(--bad);font-weight:500;}
+  .save-now-btn{
+    padding:6px 13px;border:1px solid var(--line);border-radius:10px;background:var(--surface);
+    font-size:0.8rem;cursor:pointer;color:var(--ink);font-family:'Quicksand',sans-serif;
+  }
+  .save-now-btn:hover{border-color:var(--thread);color:var(--thread);}
+  .save-now-btn:disabled{opacity:0.4;cursor:not-allowed;}
+  .save-now-btn:disabled:hover{border-color:var(--line);color:var(--ink);}
+
+  /* ---- Draw / paint toggle ---- */
+  .draw-toggle{
+    padding:8px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);
+    font-size:0.85rem;cursor:pointer;color:var(--ink);font-family:'Quicksand',sans-serif;
+  }
+  .draw-toggle:hover{border-color:var(--thread);}
+  .draw-toggle.active{background:var(--thread);color:#fff;border-color:var(--thread);}
+  .draw-palette{
+    display:none;flex-wrap:wrap;gap:8px;align-items:center;
+    margin:-8px 0 16px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  }
+  .draw-palette.active{display:flex;}
+  .draw-palette .hint{font-size:0.78rem;color:var(--ink-soft);width:100%;margin-bottom:2px;}
+  .draw-swatch{width:28px;height:28px;border-radius:9px;border:2px solid transparent;cursor:pointer;flex-shrink:0;}
+  .draw-swatch.selected{border-color:var(--overlay-ink);box-shadow:0 0 0 2px #fff inset;}
+  .draw-addcolor{
+    width:28px;height:28px;border-radius:9px;border:1px dashed var(--line);background:var(--surface);
+    cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1rem;
+    color:var(--ink-soft);position:relative;overflow:hidden;flex-shrink:0;
+  }
+  .draw-addcolor input[type=color]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;border:none;padding:0;}
+  .gridcolumn.drawmode .cell{cursor:crosshair;}
+  .cell{touch-action:none;user-select:none;}
+
+  /* ---- Recolorable legend chip ---- */
+  .chip-wrap{position:relative;display:inline-block;}
+  .chip-input{position:absolute;inset:0;opacity:0;cursor:pointer;width:16px;height:16px;border:none;padding:0;}
+
+  /* ---- Global toast ---- */
+  .global-toast{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+    background:var(--overlay-ink);color:#fff;padding:10px 18px;border-radius:12px;
+    font-size:0.85rem;z-index:400;box-shadow:0 8px 24px rgba(0,0,0,0.28);max-width:90vw;text-align:center;
+  }
+  .global-toast.error{background:var(--bad);}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <button type="button" class="titlewrap logo-home-btn" id="logoHomeBtn" aria-label="Go to home screen">
+      <svg class="yarn-icon" width="36" height="36" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="20" cy="19" r="14" stroke="#E8879E" stroke-width="2.5"/>
+        <path d="M8 13c8 4 16 4 24 0M6.5 20c9 5 18 5 27 0M9 27c7 3.5 14 3.5 21 0" stroke="#F4B860" stroke-width="2" stroke-linecap="round"/>
+        <path d="M27 29c4 3 7 6.5 7 9.5" stroke="#E8879E" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <h1>Stitch Chart</h1>
+        <p>Turn a photo into a crochet pixel chart, and keep your place row by row.</p>
+      </div>
+    </button>
+    <div class="header-actions">
+      <button class="newproj-btn" id="themeToggleBtn" title="Toggle light / dark mode">🌙</button>
+      <button class="newproj-btn" id="homeBtn">🏠 Home</button>
+      <button class="newproj-btn" id="importBtn">Import</button>
+      <input type="file" id="importFile" accept="application/json" style="display:none;">
+      <button class="newproj-btn" id="newProjectBtn" style="display:none;">+ New chart</button>
+    </div>
+  </header>
+
+  <div id="homeView">
+    <div class="home-head">
+      <h2>Your charts</h2>
+    </div>
+    <button type="button" class="continue-banner" id="continueBanner" style="display:none;">
+      <img class="continue-thumb" id="continueThumb" alt="">
+      <div class="continue-meta">
+        <div class="continue-label">Continue where you left off</div>
+        <div class="continue-name" id="continueName"></div>
+      </div>
+      <span class="continue-arrow">→</span>
+    </button>
+    <div class="fun-banner" id="funBanner">
+      <div class="fun-fact" id="funFactText"></div>
+      <div class="fun-joke-row">
+        <div class="fun-joke" id="funJokeText"></div>
+        <button type="button" class="fun-shuffle-btn" id="funShuffleBtn" title="Another one!">🔀</button>
+      </div>
+    </div>
+    <div class="folder-bar" id="folderBar"></div>
+    <div class="home-grid" id="homeGrid"></div>
+  </div>
+
+  <div id="setupView">
+    <div class="panel">
+      <div class="setup-grid">
+        <div>
+          <div class="drop" id="dropZone">
+            <div id="dropText">
+              <div style="font-size:1.4rem;">＋</div>
+              <div>Click to choose an image, or drag one in</div>
+              <div class="hint">JPG, PNG, or GIF</div>
+            </div>
+            <input type="file" id="fileInput" accept="image/*">
+          </div>
+          <button type="button" class="blank-grid-btn" id="blankGridBtn">or start with a blank grid →</button>
+
+          <div class="chosen-card" id="chosenCard" style="display:none;">
+            <canvas id="chosenThumb"></canvas>
+            <div class="chosen-actions">
+              <button type="button" id="editCropBtn">✂️ Edit crop &amp; rotate</button>
+              <button type="button" id="changeImageBtn" class="linklike">Change image</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="field">
+            <label>Chart size (stitches)</label>
+            <div class="row">
+              <div>
+                <label class="mono" style="margin-bottom:4px;">Width</label>
+                <input type="number" id="widthInput" min="4" max="200" value="40">
+              </div>
+              <div>
+                <label class="mono" style="margin-bottom:4px;">Height (rows)</label>
+                <input type="number" id="heightInput" min="4" max="260" value="50">
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Number of colors</label>
+            <div class="slidewrap">
+              <input type="range" id="colorsSlider" min="2" max="16" value="6">
+              <output id="colorsOut">6</output>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Stitch shape (width : height)</label>
+            <div class="slidewrap">
+              <input type="range" id="aspectSlider" min="70" max="130" value="100">
+              <output id="aspectOut">1.00</output>
+            </div>
+            <div class="aspecthint">Real stitches usually aren't perfectly square — nudge this if your gauge is wider or taller than it is wide.</div>
+          </div>
+
+          <div class="field">
+            <label class="checkline"><input type="checkbox" id="bottomUpCheck" checked> Row 1 starts at the bottom (typical for graphgans)</label>
+          </div>
+
+          <div class="field">
+            <label for="rowDirSelect">Row reading direction</label>
+            <select id="rowDirSelect">
+              <option value="alternate" selected>Alternate each row (turning work)</option>
+              <option value="ltr">Always left to right</option>
+              <option value="rtl">Always right to left</option>
+            </select>
+          </div>
+
+          <button class="generate-btn" id="generateBtn" disabled>Upload an image first</button>
+          <div class="errormsg" id="errorMsg"></div>
+          <div class="loading" id="loadingMsg" style="display:none;"><div class="spinner"></div><span>Casting on your stitches…</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="cropModal" style="display:none;">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2>Crop &amp; rotate</h2>
+        <button type="button" class="modal-close" id="modalCloseBtn" aria-label="Close">×</button>
+      </div>
+      <div class="crop-toolbar">
+        <button type="button" id="rotateLeftBtn" title="Rotate left 90°">⤺ Rotate</button>
+        <button type="button" id="rotateRightBtn" title="Rotate right 90°">⤻ Rotate</button>
+        <button type="button" id="resetCropBtn">Reset crop</button>
+      </div>
+      <div class="crop-canvas-wrap" id="cropCanvasWrap">
+        <canvas id="cropCanvas"></canvas>
+        <div class="croprect" id="cropRectEl">
+          <div class="handle nw" data-h="nw"></div>
+          <div class="handle ne" data-h="ne"></div>
+          <div class="handle sw" data-h="sw"></div>
+          <div class="handle se" data-h="se"></div>
+        </div>
+      </div>
+      <div class="cropHint">Drag the box to move it, or the corners to resize. The chart is generated from what's inside the box.</div>
+      <button type="button" class="generate-btn" id="doneCropBtn" style="margin-top:14px;">Use this crop ✓</button>
+    </div>
+  </div>
+
+  <div id="chartView">
+    <div class="project-row">
+      <input type="text" id="projectNameInput" class="project-name-input" placeholder="Untitled chart">
+      <button type="button" class="save-now-btn" id="undoBtn" disabled>↩ Undo</button>
+      <button type="button" class="save-now-btn" id="saveNowBtn">💾 Save</button>
+      <button type="button" class="save-now-btn" id="exportBtn">⬇ Export backup</button>
+      <button type="button" class="save-now-btn" id="aboutToggleBtn">ℹ️ About</button>
+      <span class="save-status" id="saveStatus"></span>
+    </div>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+      <span class="progress-label" id="progressLabel">0%</span>
+    </div>
+
+    <div class="about-panel" id="aboutPanel">
+      <div class="about-grid">
+        <div class="field">
+          <label for="hookSizeInput">Hook size</label>
+          <input type="text" id="hookSizeInput" placeholder="e.g. 4.5mm / G-7">
+        </div>
+        <div class="field">
+          <label for="yarnWeightInput">Yarn weight</label>
+          <input type="text" id="yarnWeightInput" placeholder="e.g. Worsted / Aran">
+        </div>
+        <div class="field">
+          <label for="yarnBrandInput">Yarn brand &amp; colorway</label>
+          <input type="text" id="yarnBrandInput" placeholder="e.g. Lion Brand Vanna's Choice — Cherry Red">
+        </div>
+      </div>
+      <div class="field">
+        <label for="notesInput">Notes</label>
+        <textarea id="notesInput" rows="3" placeholder="Gauge, pattern source, care instructions, anything else worth remembering..."></textarea>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="rownav">
+        <button id="prevBtn" title="Previous row">◀</button>
+        <div class="rowlabel">Row <input type="number" id="rowJump" min="1"> <span id="rowTotal" class="mono"></span><span class="dir" id="dirIndicator"></span></div>
+        <button id="nextBtn" title="Next row">▶</button>
+      </div>
+      <label class="checkline toolbar-check" id="bottomUpToggleWrap"><input type="checkbox" id="bottomUpToggle"> Row 1 starts at bottom</label>
+      <select id="rowDirToggle" class="toolbar-select" title="Row reading direction">
+        <option value="alternate">Alternate each row</option>
+        <option value="ltr">Always left to right</option>
+        <option value="rtl">Always right to left</option>
+      </select>
+      <button type="button" class="draw-toggle" id="drawToggleBtn">🖊 Draw</button>
+      <div class="zoomctl">
+        Zoom
+        <input type="range" id="zoomSlider" min="4" max="34" value="14">
+      </div>
+    </div>
+    <div class="draw-palette" id="drawPalette">
+      <div class="hint">Pick a color, then click or drag across the chart to paint stitches.</div>
+    </div>
+    <div class="milestone" id="milestoneMsg"></div>
+
+    <div class="summary">
+      <div class="summary-head">
+        <div class="label">This row, in order:</div>
+        <button type="button" class="mark-row-btn" id="markRowBtn">✓ Mark row done</button>
+      </div>
+      <div class="text" id="rowSummaryText">—</div>
+    </div>
+
+    <div class="chartwrap" id="chartWrap" tabindex="0">
+      <div class="chart-inner">
+        <div class="gridcolumn" id="gridColumn"></div>
+        <div class="colnums" id="colNums"></div>
+      </div>
+    </div>
+
+    <div class="rowdir-bar" id="rowDirBar">
+      <div class="rownav">
+        <button id="prevBtnBottom" title="Previous row">◀</button>
+        <div class="rowlabel">Row <input type="number" id="rowJumpBottom" min="1"> <span id="rowTotalBottom" class="mono"></span></div>
+        <button id="nextBtnBottom" title="Next row">▶</button>
+      </div>
+      <button type="button" class="rowdir-arrow-btn" id="rowDirArrowBtn" title="Tap to change row direction"><span id="rowDirArrowIcon">→</span></button>
+      <span class="rowdir-mode" id="rowDirModeText"></span>
+    </div>
+
+    <div class="stitchdivider"></div>
+
+    <div class="legend" id="legend"></div>
+
+    <div class="resize-panel">
+      <h3>Resize the chart</h3>
+      <div class="resize-row">
+        <div class="resize-mode-toggle" id="resizeModeToggle">
+          <button type="button" class="mode-btn active" id="resizeModeAddBtn" data-mode="add">+ Add</button>
+          <button type="button" class="mode-btn" id="resizeModeRemoveBtn" data-mode="remove">− Remove</button>
+        </div>
+        <label for="resizeCountInput">at a time</label>
+        <input type="number" id="resizeCountInput" min="1" max="100" value="1">
+        <label for="fillColorSelect">Fill with</label>
+        <select id="fillColorSelect"></select>
+      </div>
+      <div class="resize-buttons" id="resizeButtonsGroup">
+        <button type="button" id="rowTopBtn">Row at top</button>
+        <button type="button" id="rowBottomBtn">Row at bottom</button>
+        <button type="button" id="colLeftBtn">Column at left</button>
+        <button type="button" id="colRightBtn">Column at right</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="stitch-tooltip" id="stitchTooltip" style="display:none;"></div>
+  <div class="global-toast" id="globalToast" style="display:none;"></div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- state ----------
+  let state = null;       // { id, name, width, height, numColors, palette:[hex,...], indices, marked, currentRow, bottomUp, rowDir:'ltr'|'rtl'|'alternate', aspect, blankIndex }
+  let originalImage = null; // Image element for a freshly uploaded (not-yet-generated) file
+  let rotation = 0;         // 0 / 90 / 180 / 270
+  let rotatedCanvas = null; // originalImage rotated onto a canvas
+  let cropRect = null;      // {x,y,w,h} in rotatedCanvas natural pixel coords
+  let cropDrag = null;      // active pointer drag info, or null
+  let cellSizePx = 14;
+  let saveTimer = null;
+  let retrySaveTimer = null;
+  let saveStatusFadeTimer = null;
+  let tooltipTimer = null;
+  let drawMode = false;
+  let drawColorIndex = 0;
+  let isPainting = false;
+  let undoStack = []; // typed entries: 'marks' | 'paint' | 'palette' (lightweight diffs) or 'full' (structural snapshot)
+  let currentPaintUndoEntry = null; // the in-progress 'paint' entry for the current drag stroke, or null
+  let cellElByIdx = null;          // flat array, cellIdx -> its <div class="cell"> — lets marking/painting/recoloring
+  let rowLineByLogicalRow = null;  // patch the DOM directly instead of rebuilding all 52k+ cells on every change
+  let markedCount = 0;             // cached total of state.marked, kept in sync by setMarked() — avoids an O(n) scan per click
+
+  // ---------- elements ----------
+  const el = id => document.getElementById(id);
+  const dropZone = el('dropZone'), fileInput = el('fileInput'), dropText = el('dropText');
+  const blankGridBtn = el('blankGridBtn');
+  const chosenCard = el('chosenCard'), chosenThumb = el('chosenThumb'), editCropBtn = el('editCropBtn'), changeImageBtn = el('changeImageBtn');
+  const cropModal = el('cropModal'), modalCloseBtn = el('modalCloseBtn'), doneCropBtn = el('doneCropBtn');
+  const cropCanvas = el('cropCanvas'), cropCanvasWrap = el('cropCanvasWrap'), cropRectEl = el('cropRectEl');
+  const rotateLeftBtn = el('rotateLeftBtn'), rotateRightBtn = el('rotateRightBtn'), resetCropBtn = el('resetCropBtn');
+  const widthInput = el('widthInput'), heightInput = el('heightInput');
+  const colorsSlider = el('colorsSlider'), colorsOut = el('colorsOut');
+  const aspectSlider = el('aspectSlider'), aspectOut = el('aspectOut');
+  const bottomUpCheck = el('bottomUpCheck'), rowDirSelect = el('rowDirSelect');
+  const generateBtn = el('generateBtn'), errorMsg = el('errorMsg'), loadingMsg = el('loadingMsg');
+  const setupView = el('setupView'), chartView = el('chartView'), newProjectBtn = el('newProjectBtn');
+  const homeView = el('homeView'), homeGrid = el('homeGrid'), homeBtn = el('homeBtn'), logoHomeBtn = el('logoHomeBtn');
+  const folderBar = el('folderBar');
+  const themeToggleBtn = el('themeToggleBtn');
+  const funFactText = el('funFactText'), funJokeText = el('funJokeText'), funShuffleBtn = el('funShuffleBtn');
+  const continueBanner = el('continueBanner'), continueThumb = el('continueThumb'), continueName = el('continueName');
+  const importBtn = el('importBtn'), importFile = el('importFile');
+  const projectNameInput = el('projectNameInput'), saveStatus = el('saveStatus'), saveNowBtn = el('saveNowBtn'), exportBtn = el('exportBtn');
+  const aboutToggleBtn = el('aboutToggleBtn'), aboutPanel = el('aboutPanel');
+  const undoBtn = el('undoBtn');
+  const progressFill = el('progressFill'), progressLabel = el('progressLabel');
+  const hookSizeInput = el('hookSizeInput'), yarnWeightInput = el('yarnWeightInput'), yarnBrandInput = el('yarnBrandInput'), notesInput = el('notesInput');
+  const prevBtn = el('prevBtn'), nextBtn = el('nextBtn'), rowJump = el('rowJump'), rowTotal = el('rowTotal'), dirIndicator = el('dirIndicator');
+  const prevBtnBottom = el('prevBtnBottom'), nextBtnBottom = el('nextBtnBottom'), rowJumpBottom = el('rowJumpBottom'), rowTotalBottom = el('rowTotalBottom');
+  const bottomUpToggle = el('bottomUpToggle');
+  const rowDirToggle = el('rowDirToggle');
+  const rowDirArrowBtn = el('rowDirArrowBtn'), rowDirArrowIcon = el('rowDirArrowIcon'), rowDirModeText = el('rowDirModeText');
+  const zoomSlider = el('zoomSlider');
+  const drawToggleBtn = el('drawToggleBtn'), drawPalette = el('drawPalette');
+  const milestoneMsg = el('milestoneMsg');
+  const rowSummaryText = el('rowSummaryText'), markRowBtn = el('markRowBtn');
+  const chartWrap = el('chartWrap'), gridColumn = el('gridColumn'), colNums = el('colNums');
+  const legend = el('legend');
+  const stitchTooltip = el('stitchTooltip');
+  const fillColorSelect = el('fillColorSelect'), resizeCountInput = el('resizeCountInput');
+  const rowTopBtn = el('rowTopBtn'), rowBottomBtn = el('rowBottomBtn'), colLeftBtn = el('colLeftBtn'), colRightBtn = el('colRightBtn');
+  const resizeButtonsGroup = el('resizeButtonsGroup');
+  const resizeModeAddBtn = el('resizeModeAddBtn'), resizeModeRemoveBtn = el('resizeModeRemoveBtn');
+
+  // ---------- letters for palette ----------
+  function letterFor(i){
+    let s = '';
+    i++;
+    while(i > 0){
+      const rem = (i - 1) % 26;
+      s = String.fromCharCode(65 + rem) + s;
+      i = Math.floor((i - 1) / 26);
+    }
+    return s;
+  }
+
+  // ---------- project ids / naming / compact encoding ----------
+  function generateId(){
+    return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  function defaultProjectName(){
+    return 'Chart ' + new Date().toLocaleDateString(undefined, { month:'short', day:'numeric' });
+  }
+  // one base-36 char per stitch (supports up to 36 palette colors) — far smaller than a JSON number array
+  function encodeIndices(indices){
+    return indices.map(i => i.toString(36)).join('');
+  }
+  function decodeIndices(str){
+    return str.split('').map(c => parseInt(c, 36));
+  }
+  function encodeMarked(marked){
+    return marked.join('');
+  }
+  function decodeMarked(str){
+    return str.split('').map(Number);
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  let toastTimer = null;
+  function showToast(message, isError){
+    const t = el('globalToast');
+    t.textContent = message;
+    t.classList.toggle('error', !!isError);
+    t.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3200);
+  }
+
+  // ---------- light / dark theme ----------
+  function isDarkActive(){
+    const explicit = document.documentElement.dataset.theme;
+    if(explicit === 'dark') return true;
+    if(explicit === 'light') return false;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  function syncThemeToggleIcon(){
+    themeToggleBtn.textContent = isDarkActive() ? '☀️' : '🌙';
+  }
+  themeToggleBtn.addEventListener('click', () => {
+    const next = isDarkActive() ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try{ localStorage.setItem('stitchchart:theme', next); } catch(e){ /* not critical */ }
+    syncThemeToggleIcon();
+  });
+  syncThemeToggleIcon();
+
+  // ---------- image upload ----------
+  function handleFile(file){
+    if(!file || !file.type.startsWith('image/')){
+      errorMsg.textContent = "That doesn't look like an image file.";
+      return;
+    }
+    errorMsg.textContent = '';
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        originalImage = img;
+        rotation = 0;
+        cropRect = null;
+        dropZone.style.display = 'none';
+        chosenCard.style.display = 'flex';
+        generateBtn.disabled = false;
+        generateBtn.textContent = '🧶 Generate chart';
+        openCropModal();
+      };
+      img.onerror = () => { errorMsg.textContent = "Couldn't read that image — try a different file."; };
+      img.src = e.target.result;
+    };
+    reader.onerror = () => { errorMsg.textContent = "Couldn't read that file."; };
+    reader.readAsDataURL(file);
+  }
+
+  fileInput.addEventListener('change', () => handleFile(fileInput.files[0]));
+  ['dragenter','dragover'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(ev => dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('drag'); }));
+  dropZone.addEventListener('drop', e => { if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+
+  colorsSlider.addEventListener('input', () => colorsOut.textContent = colorsSlider.value);
+  aspectSlider.addEventListener('input', () => aspectOut.textContent = (aspectSlider.value/100).toFixed(2));
+
+  // ---------- crop / rotate editor ----------
+  function getRotatedCanvas(){
+    const rad = rotation * Math.PI / 180;
+    const ow = originalImage.naturalWidth, oh = originalImage.naturalHeight;
+    const swap = (rotation === 90 || rotation === 270);
+    const cw = swap ? oh : ow, ch = swap ? ow : oh;
+    const c = document.createElement('canvas');
+    c.width = cw; c.height = ch;
+    const ctx = c.getContext('2d');
+    ctx.translate(cw/2, ch/2);
+    ctx.rotate(rad);
+    ctx.drawImage(originalImage, -ow/2, -oh/2);
+    return c;
+  }
+
+  function renderCropStage(){
+    rotatedCanvas = getRotatedCanvas();
+    cropCanvas.width = rotatedCanvas.width;
+    cropCanvas.height = rotatedCanvas.height;
+    cropCanvas.getContext('2d').drawImage(rotatedCanvas, 0, 0);
+    if(!cropRect){
+      cropRect = { x: 0, y: 0, w: rotatedCanvas.width, h: rotatedCanvas.height };
+    }
+    requestAnimationFrame(syncCropRectStyle);
+  }
+
+  function cropScale(){
+    return cropCanvas.clientWidth / cropCanvas.width || 1;
+  }
+
+  function syncCropRectStyle(){
+    const s = cropScale();
+    cropRectEl.style.left = (cropRect.x * s) + 'px';
+    cropRectEl.style.top = (cropRect.y * s) + 'px';
+    cropRectEl.style.width = (cropRect.w * s) + 'px';
+    cropRectEl.style.height = (cropRect.h * s) + 'px';
+  }
+
+  const MIN_CROP = 20; // natural px
+
+  function clampCropRect(){
+    const maxW = rotatedCanvas.width, maxH = rotatedCanvas.height;
+    cropRect.w = Math.max(MIN_CROP, Math.min(cropRect.w, maxW));
+    cropRect.h = Math.max(MIN_CROP, Math.min(cropRect.h, maxH));
+    cropRect.x = Math.max(0, Math.min(cropRect.x, maxW - cropRect.w));
+    cropRect.y = Math.max(0, Math.min(cropRect.y, maxH - cropRect.h));
+  }
+
+  cropRectEl.addEventListener('pointerdown', e => {
+    if(e.target.classList.contains('handle')) return; // handled separately
+    cropDrag = { mode:'move', startX:e.clientX, startY:e.clientY, rect:{...cropRect} };
+    cropRectEl.setPointerCapture(e.pointerId);
+  });
+
+  cropRectEl.querySelectorAll('.handle').forEach(h => {
+    h.addEventListener('pointerdown', e => {
+      e.stopPropagation();
+      cropDrag = { mode:'resize', handle:h.dataset.h, startX:e.clientX, startY:e.clientY, rect:{...cropRect} };
+      h.setPointerCapture(e.pointerId);
+    });
+  });
+
+  window.addEventListener('pointermove', e => {
+    if(!cropDrag || !rotatedCanvas) return;
+    const s = cropScale();
+    const dx = (e.clientX - cropDrag.startX) / s;
+    const dy = (e.clientY - cropDrag.startY) / s;
+    const r = cropDrag.rect;
+    if(cropDrag.mode === 'move'){
+      cropRect.x = r.x + dx;
+      cropRect.y = r.y + dy;
+      cropRect.w = r.w;
+      cropRect.h = r.h;
+    } else {
+      let {x,y,w,h} = r;
+      if(cropDrag.handle.includes('n')){ y = r.y + dy; h = r.h - dy; }
+      if(cropDrag.handle.includes('s')){ h = r.h + dy; }
+      if(cropDrag.handle.includes('w')){ x = r.x + dx; w = r.w - dx; }
+      if(cropDrag.handle.includes('e')){ w = r.w + dx; }
+      cropRect.x = x; cropRect.y = y; cropRect.w = w; cropRect.h = h;
+    }
+    clampCropRect();
+    syncCropRectStyle();
+  });
+
+  window.addEventListener('pointerup', () => {
+    cropDrag = null;
+    if(isPainting){
+      isPainting = false;
+      // a stroke that never actually changed a cell's color leaves an empty entry — drop it rather than waste an undo step
+      if(currentPaintUndoEntry && currentPaintUndoEntry.entries.length === 0){
+        const i = undoStack.indexOf(currentPaintUndoEntry);
+        if(i !== -1) undoStack.splice(i, 1);
+        undoBtn.disabled = undoStack.length === 0;
+      }
+      currentPaintUndoEntry = null;
+      if(state){ renderLegend(); renderRowSummary(); renderFillOptions(); }
+    }
+  });
+
+  rotateLeftBtn.addEventListener('click', () => {
+    if(!originalImage) return;
+    rotation = (rotation + 270) % 360;
+    cropRect = null;
+    renderCropStage();
+  });
+  rotateRightBtn.addEventListener('click', () => {
+    if(!originalImage) return;
+    rotation = (rotation + 90) % 360;
+    cropRect = null;
+    renderCropStage();
+  });
+  resetCropBtn.addEventListener('click', () => {
+    if(!rotatedCanvas) return;
+    cropRect = { x:0, y:0, w:rotatedCanvas.width, h:rotatedCanvas.height };
+    syncCropRectStyle();
+  });
+
+  function openCropModal(){
+    cropModal.style.display = 'flex';
+    renderCropStage();
+  }
+  function closeCropModal(){
+    cropModal.style.display = 'none';
+    updateThumbnail();
+  }
+  function updateThumbnail(){
+    if(!rotatedCanvas || !cropRect) return;
+    const src = getCroppedSourceCanvas();
+    const maxDim = 110;
+    const scale = Math.min(maxDim / src.width, maxDim / src.height, 1) || 1;
+    chosenThumb.width = Math.max(1, Math.round(src.width * scale));
+    chosenThumb.height = Math.max(1, Math.round(src.height * scale));
+    chosenThumb.getContext('2d').drawImage(src, 0, 0, chosenThumb.width, chosenThumb.height);
+  }
+
+  doneCropBtn.addEventListener('click', closeCropModal);
+  modalCloseBtn.addEventListener('click', closeCropModal);
+  cropModal.addEventListener('click', e => { if(e.target === cropModal) closeCropModal(); });
+  editCropBtn.addEventListener('click', openCropModal);
+
+  changeImageBtn.addEventListener('click', () => {
+    originalImage = null; rotatedCanvas = null; cropRect = null; rotation = 0;
+    chosenCard.style.display = 'none';
+    dropZone.style.display = 'flex';
+    fileInput.value = '';
+    generateBtn.disabled = true;
+    generateBtn.textContent = 'Upload an image first';
+  });
+
+  function makeThumbnailDataUrl(canvas, maxDim){
+    const scale = Math.min(maxDim / canvas.width, maxDim / canvas.height, 1) || 1;
+    const tw = Math.max(1, Math.round(canvas.width * scale));
+    const th = Math.max(1, Math.round(canvas.height * scale));
+    const t = document.createElement('canvas');
+    t.width = tw; t.height = th;
+    t.getContext('2d').drawImage(canvas, 0, 0, tw, th);
+    return t.toDataURL('image/jpeg', 0.75);
+  }
+
+  function getCroppedSourceCanvas(){
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(cropRect.w));
+    c.height = Math.max(1, Math.round(cropRect.h));
+    c.getContext('2d').drawImage(
+      rotatedCanvas,
+      cropRect.x, cropRect.y, cropRect.w, cropRect.h,
+      0, 0, c.width, c.height
+    );
+    return c;
+  }
+
+  // ---------- k-means color quantization ----------
+  function quantize(pixels, k){
+    const n = pixels.length;
+    k = Math.min(k, n);
+    // seed centroids by picking evenly spaced distinct-ish samples
+    const centroids = [];
+    const usedIdx = new Set();
+    for(let i=0;i<k;i++){
+      let idx = Math.floor(i * n / k);
+      while(usedIdx.has(idx) && usedIdx.size < n) idx = (idx+1) % n;
+      usedIdx.add(idx);
+      centroids.push(pixels[idx].slice());
+    }
+    const assignments = new Int32Array(n);
+    const ITER = 10;
+    for(let iter=0; iter<ITER; iter++){
+      for(let i=0;i<n;i++){
+        let best=0, bestD=Infinity;
+        const p = pixels[i];
+        for(let c=0;c<centroids.length;c++){
+          const cc = centroids[c];
+          const dr=p[0]-cc[0], dg=p[1]-cc[1], db=p[2]-cc[2];
+          const d = dr*dr+dg*dg+db*db;
+          if(d<bestD){bestD=d;best=c;}
+        }
+        assignments[i]=best;
+      }
+      const sums = centroids.map(()=>[0,0,0,0]);
+      for(let i=0;i<n;i++){
+        const c = assignments[i], p = pixels[i];
+        sums[c][0]+=p[0]; sums[c][1]+=p[1]; sums[c][2]+=p[2]; sums[c][3]++;
+      }
+      for(let c=0;c<centroids.length;c++){
+        if(sums[c][3]>0){
+          centroids[c][0]=Math.round(sums[c][0]/sums[c][3]);
+          centroids[c][1]=Math.round(sums[c][1]/sums[c][3]);
+          centroids[c][2]=Math.round(sums[c][2]/sums[c][3]);
+        }
+      }
+    }
+    return { centroids, assignments };
+  }
+
+  function rgbToHex(rgb){
+    return '#' + rgb.map(v => Math.max(0,Math.min(255,v)).toString(16).padStart(2,'0')).join('');
+  }
+
+  // ---------- generate chart from image ----------
+  function generateChart(){
+    if(!originalImage || !rotatedCanvas || !cropRect) return;
+    const w = Math.max(4, Math.min(200, parseInt(widthInput.value,10) || 40));
+    const h = Math.max(4, Math.min(260, parseInt(heightInput.value,10) || 40));
+    const numColors = parseInt(colorsSlider.value,10);
+    const aspect = parseInt(aspectSlider.value,10)/100;
+    const bottomUp = bottomUpCheck.checked;
+    const rowDir = rowDirSelect.value;
+
+    loadingMsg.style.display = 'flex';
+    generateBtn.disabled = true;
+    errorMsg.textContent = '';
+
+    setTimeout(() => {
+      try{
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        const sourceCanvas = getCroppedSourceCanvas();
+        const thumbnail = makeThumbnailDataUrl(sourceCanvas, 200);
+        ctx.drawImage(sourceCanvas, 0, 0, w, h);
+        const data = ctx.getImageData(0,0,w,h).data;
+
+        const pixels = new Array(w*h);
+        for(let i=0;i<w*h;i++){
+          pixels[i] = [data[i*4], data[i*4+1], data[i*4+2]];
+        }
+
+        const { centroids, assignments } = quantize(pixels, numColors);
+        const palette = centroids.map(rgbToHex);
+
+        state = {
+          id: generateId(),
+          name: defaultProjectName(),
+          width: w, height: h, numColors, palette,
+          indices: Array.from(assignments),
+          marked: new Array(w*h).fill(0),
+          currentRow: 1,
+          bottomUp, rowDir, aspect,
+          thumbnail,
+          about: { hookSize:'', yarnWeight:'', yarnBrand:'', notes:'' },
+          collectionId: null
+        };
+        cellSizePx = Math.max(4, Math.min(24, Math.floor(760 / w)));
+        zoomSlider.value = cellSizePx;
+        resetUndo();
+
+        loadingMsg.style.display = 'none';
+        showChart();
+        saveState();
+      } catch(err){
+        loadingMsg.style.display = 'none';
+        generateBtn.disabled = false;
+        errorMsg.textContent = 'Something went wrong building the chart. Try a smaller size or a different image.';
+        console.error(err);
+      }
+    }, 30);
+  }
+
+  generateBtn.addEventListener('click', generateChart);
+
+  // ---------- create a blank chart (no photo — just a grid to draw/plan on) ----------
+  function generateBlankChart(){
+    const w = Math.max(4, Math.min(200, parseInt(widthInput.value,10) || 40));
+    const h = Math.max(4, Math.min(260, parseInt(heightInput.value,10) || 40));
+    const aspect = parseInt(aspectSlider.value,10)/100;
+    const bottomUp = bottomUpCheck.checked;
+    const rowDir = rowDirSelect.value;
+    const palette = ['#FFFFFF', '#2B2622']; // a simple starting pair — add more with the draw tool's "+" swatch
+
+    state = {
+      id: generateId(),
+      name: defaultProjectName(),
+      width: w, height: h, numColors: palette.length, palette,
+      indices: new Array(w * h).fill(0),
+      marked: new Array(w * h).fill(0),
+      currentRow: 1,
+      bottomUp, rowDir, aspect,
+      thumbnail: undefined,
+      about: { hookSize:'', yarnWeight:'', yarnBrand:'', notes:'' },
+      collectionId: null
+    };
+    cellSizePx = Math.max(4, Math.min(24, Math.floor(760 / w)));
+    zoomSlider.value = cellSizePx;
+    resetUndo();
+    showChart();
+    saveState();
+    showToast('Blank grid created — use 🖊 Draw to fill it in.');
+  }
+  blankGridBtn.addEventListener('click', generateBlankChart);
+
+  // ---------- manual save / export / import (backup path if storage is flaky) ----------
+  saveNowBtn.addEventListener('click', () => {
+    clearTimeout(saveTimer);
+    saveState();
+  });
+
+  exportBtn.addEventListener('click', () => {
+    if(!state) return;
+    const payload = {
+      id: state.id, name: state.name,
+      width: state.width, height: state.height, numColors: state.numColors,
+      palette: state.palette,
+      indices: encodeIndices(state.indices),
+      marked: encodeMarked(state.marked),
+      currentRow: state.currentRow,
+      bottomUp: state.bottomUp, rowDir: state.rowDir, aspect: state.aspect,
+      blankIndex: state.blankIndex,
+      thumbnail: state.thumbnail,
+      about: state.about,
+      collectionId: state.collectionId,
+      exportedAt: Date.now()
+    };
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = (state.name || 'stitch-chart').replace(/[^a-z0-9\- _]/gi, '').trim().replace(/\s+/g, '-') || 'stitch-chart';
+    a.href = url;
+    a.download = safeName + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  function triggerImport(){ importFile.click(); }
+  importBtn.addEventListener('click', triggerImport);
+
+  importFile.addEventListener('change', () => {
+    const file = importFile.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      try{
+        const p = JSON.parse(e.target.result);
+        state = stateFromPayload(p);
+        state.id = generateId(); // always import as a new chart, never overwrite an existing save
+        state.name = (state.name || 'Untitled chart') + ' (imported)';
+        cellSizePx = Math.max(4, Math.min(24, Math.floor(760 / state.width)));
+        zoomSlider.value = cellSizePx;
+        resetUndo();
+        showChart();
+        saveState();
+        showToast('Chart imported.');
+      } catch(err){
+        console.error('Could not read import file', err);
+        showToast("Couldn't read that file — is it a Stitch Chart export?", true);
+      }
+    };
+    reader.onerror = () => { showToast("Couldn't read that file.", true); };
+    reader.readAsText(file);
+    importFile.value = '';
+  });
+
+  // ---------- row helpers ----------
+  function imageRowFor(logicalRow){
+    // logicalRow is 1-indexed
+    if(state.bottomUp) return state.height - logicalRow;
+    return logicalRow - 1;
+  }
+  function rowDirection(logicalRow){
+    if(state.rowDir === 'ltr') return 'ltr';
+    if(state.rowDir === 'rtl') return 'rtl';
+    return (logicalRow % 2 === 1) ? 'ltr' : 'rtl'; // alternate
+  }
+  function rowIndices(imageRow){
+    const w = state.width;
+    const arr = new Array(w);
+    for(let x=0;x<w;x++) arr[x] = state.indices[imageRow*w + x];
+    return arr;
+  }
+  // consecutive runs of the same color for a row, in reading order — not a per-color total.
+  // Each run also carries the actual cell indices it covers, so a run can be checked off in one tap.
+  function rleRuns(imgRow){
+    const w = state.width;
+    const rtl = rowDirection(state.currentRow) === 'rtl';
+    const order = new Array(w);
+    for(let i=0;i<w;i++) order[i] = rtl ? (w - 1 - i) : i;
+
+    const runs = [];
+    let i=0;
+    while(i<w){
+      let j=i;
+      const colorIndex = state.indices[imgRow*w + order[i]];
+      while(j<w && state.indices[imgRow*w + order[j]] === colorIndex) j++;
+      const cellIndices = order.slice(i,j).map(x => imgRow*w + x);
+      runs.push({ count: j-i, colorIndex, cellIndices });
+      i=j;
+    }
+    return runs;
+  }
+  function stitchNumberInRow(logicalRow, ximage){
+    return rowDirection(logicalRow) === 'ltr' ? (ximage + 1) : (state.width - ximage);
+  }
+
+  // ---------- rendering ----------
+  function renderGrid(){
+    gridColumn.innerHTML = '';
+    gridColumn.classList.toggle('drawmode', drawMode);
+    const w = state.width, h = state.height, aspect = state.aspect;
+    const cellW = Math.max(2, Math.round(cellSizePx * aspect));
+    const cellH = cellSizePx;
+    cellElByIdx = new Array(w * h);
+    rowLineByLogicalRow = {};
+
+    for(let imgRow = 0; imgRow < h; imgRow++){
+      const logicalRow = state.bottomUp ? (h - imgRow) : (imgRow + 1);
+      const line = document.createElement('div');
+      line.className = 'rowline';
+      if(logicalRow === state.currentRow) line.classList.add('current');
+      else line.classList.add('dim');
+      line.dataset.logicalRow = logicalRow;
+
+      const numEl = document.createElement('div');
+      numEl.className = 'rownum mono' + (logicalRow === state.currentRow ? ' current' : '');
+      if(logicalRow === 1){ numEl.classList.add('first'); numEl.title = 'First row'; }
+      if(logicalRow === h){ numEl.classList.add('last'); numEl.title = 'Last row'; }
+      numEl.textContent = logicalRow;
+      numEl.addEventListener('click', () => setRow(logicalRow));
+      line.appendChild(numEl);
+      rowLineByLogicalRow[logicalRow] = { line, numEl };
+
+      const cellsRow = document.createElement('div');
+      cellsRow.className = 'cellsrow';
+      const idxArr = rowIndices(imgRow);
+      for(let x=0;x<w;x++){
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.style.width = cellW+'px';
+        cell.style.height = cellH+'px';
+        cell.style.background = state.palette[idxArr[x]];
+        const cellIdx = imgRow*w + x;
+        if(state.marked[cellIdx]) cell.classList.add('marked');
+        cellElByIdx[cellIdx] = cell;
+        const thisX = x, thisLogicalRow = logicalRow;
+
+        cell.addEventListener('pointerdown', e => {
+          if(!drawMode) return;
+          isPainting = true;
+          currentPaintUndoEntry = pushPaintUndo(); // one lightweight entry per drag stroke, not per cell
+          paintCell(cell, cellIdx);
+          e.preventDefault();
+        });
+        cell.addEventListener('pointerenter', () => {
+          if(!drawMode || !isPainting) return;
+          paintCell(cell, cellIdx);
+        });
+        cell.addEventListener('click', () => {
+          if(drawMode) return;
+          const nowMarked = state.marked[cellIdx] ? 0 : 1;
+          pushMarkUndo([cellIdx]);
+          setMarked(cellIdx, nowMarked);
+          cell.classList.toggle('marked', !!nowMarked);
+          showStitchTooltip(cell, thisLogicalRow, thisX, state.indices[cellIdx]);
+          renderRowSummary();
+          renderProgress();
+          scheduleSave();
+          if(nowMarked) advanceIfRowComplete(imgRow);
+        });
+        cellsRow.appendChild(cell);
+      }
+      line.appendChild(cellsRow);
+      gridColumn.appendChild(line);
+    }
+    renderColNums();
+  }
+
+  // pick a readable step (1,2,5,10,20,50,100...) so labels don't crowd at low zoom
+  function niceLabelStep(rawStep){
+    const STEPS = [1,2,5,10,20,25,50,100];
+    for(const s of STEPS) if(s >= rawStep) return s;
+    return STEPS[STEPS.length - 1];
+  }
+
+  function renderColNums(){
+    colNums.innerHTML = '';
+    const w = state.width, aspect = state.aspect;
+    const cellW = Math.max(2, Math.round(cellSizePx * aspect));
+    const MIN_LABEL_SPACING = 20; // px — rough minimum gap a number needs to stay legible
+    const step = niceLabelStep(MIN_LABEL_SPACING / cellW);
+
+    const spacer = document.createElement('div');
+    spacer.className = 'colspacer';
+    colNums.appendChild(spacer);
+
+    for(let x=0; x<w; x++){
+      const num = x + 1;
+      const cell = document.createElement('div');
+      cell.className = 'colnum mono';
+      cell.style.width = cellW + 'px';
+      if(num === 1 || num === w || num % step === 0) cell.textContent = num;
+      colNums.appendChild(cell);
+    }
+  }
+
+  function paintCell(cell, cellIdx){
+    if(state.indices[cellIdx] === drawColorIndex) return;
+    if(currentPaintUndoEntry) currentPaintUndoEntry.entries.push({ idx: cellIdx, prev: state.indices[cellIdx] });
+    state.indices[cellIdx] = drawColorIndex;
+    cell.style.background = state.palette[drawColorIndex];
+    scheduleSave();
+  }
+
+  function showStitchTooltip(cellEl, logicalRow, ximage, paletteIdx){
+    const stitchNum = stitchNumberInRow(logicalRow, ximage);
+    const letter = letterFor(paletteIdx);
+    stitchTooltip.textContent = `Row ${logicalRow} • Stitch ${stitchNum} of ${state.width} • Color ${letter}`;
+    const r = cellEl.getBoundingClientRect();
+    stitchTooltip.style.left = (r.left + r.width/2) + 'px';
+    stitchTooltip.style.top = (r.top - 8) + 'px';
+    stitchTooltip.style.display = 'block';
+    clearTimeout(tooltipTimer);
+    tooltipTimer = setTimeout(() => { stitchTooltip.style.display = 'none'; }, 1800);
+  }
+
+  function scrollCurrentIntoView(smooth){
+    const currentEl = gridColumn.querySelector('.rowline.current');
+    if(currentEl) currentEl.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'center' });
+  }
+
+  function renderToolbar(){
+    rowJump.value = state.currentRow;
+    rowJump.min = 1; rowJump.max = state.height;
+    rowTotal.textContent = '/ ' + state.height;
+    bottomUpToggle.checked = !!state.bottomUp;
+    rowDirToggle.value = state.rowDir;
+    const dir = rowDirection(state.currentRow);
+    dirIndicator.textContent = dir === 'ltr' ? '→' : '←';
+    prevBtn.disabled = state.currentRow <= 1;
+    nextBtn.disabled = state.currentRow >= state.height;
+    rowJumpBottom.value = state.currentRow;
+    rowJumpBottom.min = 1; rowJumpBottom.max = state.height;
+    rowTotalBottom.textContent = '/ ' + state.height;
+    prevBtnBottom.disabled = state.currentRow <= 1;
+    nextBtnBottom.disabled = state.currentRow >= state.height;
+    if(state.currentRow === 1) milestoneMsg.textContent = '🧶 First row — chain up and get going!';
+    else if(state.currentRow === state.height) milestoneMsg.textContent = '🏁 Last row — finish it off!';
+    else {
+      const frac = milestoneFractionForRow(state.currentRow, state.height);
+      milestoneMsg.textContent = frac ? '✨ ' + pickRandom(MILESTONE_MESSAGES[frac]) : '';
+    }
+    renderRowDirBar();
+  }
+
+  // a handful of encouraging checkpoints through the chart — not every row, just enough to feel like progress.
+  // each fraction has its own pool so "halfway" only ever shows up at the actual halfway row.
+  const MILESTONE_MESSAGES = {
+    0.25: [
+      "Quarter of the way there — keep those stitches coming!",
+      "You're finding your rhythm now.",
+      "Nice progress — the picture's starting to take shape!"
+    ],
+    0.5: [
+      "Halfway there! Maybe time for a stretch break.",
+      "Look how far you've come already."
+    ],
+    0.75: [
+      "Three-quarters done — the finish line is in sight!",
+      "So close now — just a little further."
+    ]
+  };
+  function milestoneFractionForRow(row, height){
+    for(const f of [0.25, 0.5, 0.75]){
+      const r = Math.round(height * f);
+      if(r > 1 && r < height && r === row) return f;
+    }
+    return null;
+  }
+
+  const ROW_DIR_MODE_LABEL = { ltr:'Always left to right', rtl:'Always right to left', alternate:'Alternates each row' };
+  const ROW_DIR_ORDER = ['alternate', 'ltr', 'rtl'];
+
+  function renderRowDirBar(){
+    const dir = rowDirection(state.currentRow);
+    rowDirArrowIcon.textContent = dir === 'ltr' ? '→' : '←';
+    rowDirModeText.innerHTML = `Row ${state.currentRow} works <b>${dir === 'ltr' ? 'left to right' : 'right to left'}</b> — ${ROW_DIR_MODE_LABEL[state.rowDir]} (tap arrow to change)`;
+  }
+
+  rowDirArrowBtn.addEventListener('click', () => {
+    if(!state) return;
+    const next = ROW_DIR_ORDER[(ROW_DIR_ORDER.indexOf(state.rowDir) + 1) % ROW_DIR_ORDER.length];
+    state.rowDir = next;
+    renderToolbar();
+    renderRowSummary();
+    scheduleSave();
+  });
+
+  function renderRowSummary(){
+    const imgRow = imageRowFor(state.currentRow);
+    const runs = rleRuns(imgRow);
+    rowSummaryText.innerHTML = '';
+    runs.forEach((r, i) => {
+      if(i > 0){
+        const sep = document.createElement('span');
+        sep.className = 'run-sep';
+        sep.textContent = '–';
+        rowSummaryText.appendChild(sep);
+      }
+      const markedInRun = r.cellIndices.reduce((n, ci) => n + (state.marked[ci] ? 1 : 0), 0);
+      const remaining = r.count - markedInRun;
+      const allMarked = remaining === 0;
+      const chip = document.createElement('span');
+      chip.className = 'run-chip' + (allMarked ? ' done' : '');
+      chip.title = allMarked ? 'All done — tap to uncheck these stitches' : `${remaining} of ${r.count} left — tap to check off the rest`;
+      chip.innerHTML = `<span class="run-swatch" style="background:${state.palette[r.colorIndex]}"></span>${remaining}<b>${letterFor(r.colorIndex)}</b>`;
+      chip.addEventListener('click', () => {
+        const markValue = allMarked ? 0 : 1;
+        pushMarkUndo(r.cellIndices);
+        r.cellIndices.forEach(ci => { setMarked(ci, markValue); updateCellMarkedVisual(ci); });
+        renderRowSummary();
+        renderProgress();
+        scheduleSave();
+        if(markValue === 1) advanceIfRowComplete(imgRow);
+      });
+      rowSummaryText.appendChild(chip);
+    });
+
+    const w = state.width;
+    const rowAllMarked = w > 0 && Array.from({length:w}, (_,x) => state.marked[imgRow*w + x]).every(Boolean);
+    markRowBtn.textContent = rowAllMarked ? '↺ Unmark row' : '✓ Mark row done';
+    markRowBtn.classList.toggle('done', rowAllMarked);
+  }
+
+  markRowBtn.addEventListener('click', () => {
+    if(!state) return;
+    const imgRow = imageRowFor(state.currentRow);
+    const w = state.width;
+    const cellIndices = Array.from({length:w}, (_,x) => imgRow*w + x);
+    const allMarked = cellIndices.every(ci => state.marked[ci]);
+    const markValue = allMarked ? 0 : 1;
+    pushMarkUndo(cellIndices);
+    cellIndices.forEach(ci => { setMarked(ci, markValue); updateCellMarkedVisual(ci); });
+    renderRowSummary();
+    renderProgress();
+    scheduleSave();
+    if(markValue === 1) advanceIfRowComplete(imgRow);
+  });
+
+  function renderLegend(){
+    legend.innerHTML = '<h3>Colors used — click a swatch to recolor it</h3>';
+    const counts = new Array(state.palette.length).fill(0);
+    state.indices.forEach(i => counts[i]++);
+    state.palette.forEach((hex, i) => {
+      const s = document.createElement('div');
+      s.className = 'swatch';
+      s.innerHTML = `<label class="chip-wrap"><span class="chip" style="background:${hex}"></span><input type="color" class="chip-input" value="${hex}"></label><span class="letter">${letterFor(i)}</span><span class="count">${counts[i]} sts</span>`;
+      const chipInput = s.querySelector('.chip-input');
+      const chip = s.querySelector('.chip');
+      chipInput.addEventListener('pointerdown', () => pushPaletteUndo(), { once: true });
+      chipInput.addEventListener('input', () => {
+        const newHex = chipInput.value.toUpperCase();
+        state.palette[i] = newHex;
+        chip.style.background = newHex;
+        updateCellsForColor(i); // native color pickers fire 'input' rapidly while dragging — patch cells in place, don't rebuild the grid
+        renderFillOptions();
+        if(drawMode) renderDrawPalette();
+        scheduleSave();
+      });
+      legend.appendChild(s);
+    });
+  }
+
+  function renderFillOptions(){
+    const prevVal = fillColorSelect.value;
+    fillColorSelect.innerHTML = '';
+    state.palette.forEach((hex, i) => {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = letterFor(i) + '  ' + hex;
+      fillColorSelect.appendChild(opt);
+    });
+    const blankOpt = document.createElement('option');
+    blankOpt.value = 'blank';
+    blankOpt.textContent = '+ New blank (white)';
+    fillColorSelect.appendChild(blankOpt);
+    // restore previous choice if it still exists
+    if(prevVal && [...fillColorSelect.options].some(o => o.value === prevVal)){
+      fillColorSelect.value = prevVal;
+    }
+  }
+
+  function renderAll(){
+    projectNameInput.value = state.name || '';
+    recomputeMarkedCount();
+    renderAbout();
+    renderGrid();
+    renderToolbar();
+    renderRowSummary();
+    renderLegend();
+    renderFillOptions();
+    renderProgress();
+  }
+
+  // markedCount is a running total kept in sync by setMarked(); recomputeMarkedCount() re-derives it
+  // from scratch only when a whole new chart is loaded or its dimensions change (cheap, done once —
+  // not on every stitch click, where an O(w*h) rescan would add up on a large chart).
+  function recomputeMarkedCount(){
+    markedCount = state.marked.reduce((sum, m) => sum + (m ? 1 : 0), 0);
+  }
+  function setMarked(ci, value){
+    const cur = state.marked[ci] ? 1 : 0;
+    const next = value ? 1 : 0;
+    if(cur === next) return;
+    state.marked[ci] = value;
+    markedCount += (next - cur);
+  }
+
+  function renderProgress(){
+    const total = state.width * state.height;
+    const pct = total ? Math.round((markedCount / total) * 100) : 0;
+    progressFill.style.width = pct + '%';
+    progressLabel.textContent = pct + '%';
+  }
+
+  function renderAbout(){
+    const about = state.about || {};
+    hookSizeInput.value = about.hookSize || '';
+    yarnWeightInput.value = about.yarnWeight || '';
+    yarnBrandInput.value = about.yarnBrand || '';
+    notesInput.value = about.notes || '';
+  }
+
+  projectNameInput.addEventListener('input', () => {
+    if(!state) return;
+    state.name = projectNameInput.value.trim() || 'Untitled chart';
+    scheduleSave();
+  });
+
+  aboutToggleBtn.addEventListener('click', () => aboutPanel.classList.toggle('open'));
+
+  function bindAboutField(input, key){
+    input.addEventListener('input', () => {
+      if(!state) return;
+      if(!state.about) state.about = {};
+      state.about[key] = input.value;
+      scheduleSave();
+    });
+  }
+  bindAboutField(hookSizeInput, 'hookSize');
+  bindAboutField(yarnWeightInput, 'yarnWeight');
+  bindAboutField(yarnBrandInput, 'yarnBrand');
+  bindAboutField(notesInput, 'notes');
+
+  // ---------- growing the chart ----------
+  function ensureBlankSwatch(){
+    if(state.blankIndex !== undefined && state.blankIndex < state.palette.length) return state.blankIndex;
+    state.palette.push('#FFFFFF');
+    state.blankIndex = state.palette.length - 1;
+    return state.blankIndex;
+  }
+
+  function resolveFillIndex(){
+    const val = fillColorSelect.value;
+    if(val === 'blank') return ensureBlankSwatch();
+    const i = parseInt(val, 10);
+    return Number.isFinite(i) ? i : 0;
+  }
+
+  function insertRowInto(arr, w, position, fillValue){
+    const pad = new Array(w).fill(fillValue);
+    return position === 'top' ? pad.concat(arr) : arr.concat(pad);
+  }
+  function insertColInto(arr, w, h, position, fillValue){
+    const out = new Array(h * (w + 1));
+    for(let row = 0; row < h; row++){
+      const oldStart = row * w, newStart = row * (w + 1);
+      if(position === 'left'){
+        out[newStart] = fillValue;
+        for(let x = 0; x < w; x++) out[newStart + 1 + x] = arr[oldStart + x];
+      } else {
+        for(let x = 0; x < w; x++) out[newStart + x] = arr[oldStart + x];
+        out[newStart + w] = fillValue;
+      }
+    }
+    return out;
+  }
+
+  function removeRowFrom(arr, w, position, count){
+    return position === 'top' ? arr.slice(count * w) : arr.slice(0, arr.length - count * w);
+  }
+  function removeColFrom(arr, w, h, position){
+    const out = new Array(h * (w - 1));
+    for(let row = 0; row < h; row++){
+      const oldStart = row * w, newStart = row * (w - 1);
+      if(position === 'left'){
+        for(let x = 1; x < w; x++) out[newStart + (x - 1)] = arr[oldStart + x];
+      } else {
+        for(let x = 0; x < w - 1; x++) out[newStart + x] = arr[oldStart + x];
+      }
+    }
+    return out;
+  }
+
+  function resolveResizeCount(){
+    const n = parseInt(resizeCountInput.value, 10);
+    return Number.isFinite(n) ? Math.max(1, Math.min(100, n)) : 1;
+  }
+
+  function addRow(position, fillIndex, count){
+    pushStructuralUndo();
+    count = Math.max(1, count || 1);
+    const w = state.width, oldH = state.height;
+    const oldImageRow = imageRowFor(state.currentRow);
+    for(let i=0;i<count;i++){
+      state.indices = insertRowInto(state.indices, w, position, fillIndex);
+      state.marked = insertRowInto(state.marked, w, position, 0);
+    }
+    state.height = oldH + count;
+    const newImageRow = position === 'top' ? oldImageRow + count : oldImageRow;
+    state.currentRow = state.bottomUp ? (state.height - newImageRow) : (newImageRow + 1);
+    renderAll();
+    scrollCurrentIntoView(true);
+    saveState();
+  }
+
+  function addColumn(position, fillIndex, count){
+    pushStructuralUndo();
+    count = Math.max(1, count || 1);
+    for(let i=0;i<count;i++){
+      const w = state.width, h = state.height;
+      state.indices = insertColInto(state.indices, w, h, position, fillIndex);
+      state.marked = insertColInto(state.marked, w, h, position, 0);
+      state.width = w + 1;
+    }
+    renderAll();
+    scrollCurrentIntoView(false);
+    saveState();
+  }
+
+  function removeRow(position, count){
+    count = Math.max(1, count || 1);
+    count = Math.min(count, state.height - 1); // always leave at least 1 row
+    if(count <= 0){ showToast("Can't remove — the chart needs at least one row.", true); return; }
+    pushStructuralUndo();
+    const w = state.width;
+    const oldImageRow = imageRowFor(state.currentRow);
+    state.indices = removeRowFrom(state.indices, w, position, count);
+    state.marked = removeRowFrom(state.marked, w, position, count);
+    state.height -= count;
+    const newImageRow = position === 'top' ? Math.max(0, oldImageRow - count) : Math.min(state.height - 1, oldImageRow);
+    state.currentRow = Math.max(1, Math.min(state.height, state.bottomUp ? (state.height - newImageRow) : (newImageRow + 1)));
+    renderAll();
+    scrollCurrentIntoView(true);
+    saveState();
+  }
+
+  function removeColumn(position, count){
+    count = Math.max(1, count || 1);
+    count = Math.min(count, state.width - 1); // always leave at least 1 column
+    if(count <= 0){ showToast("Can't remove — the chart needs at least one column.", true); return; }
+    pushStructuralUndo();
+    const h = state.height;
+    for(let i=0;i<count;i++){
+      const w = state.width;
+      state.indices = removeColFrom(state.indices, w, h, position);
+      state.marked = removeColFrom(state.marked, w, h, position);
+      state.width = w - 1;
+    }
+    renderAll();
+    scrollCurrentIntoView(false);
+    saveState();
+  }
+
+  // tap once to arm, tap again within a few seconds to confirm — mirrors the delete pattern on the Home screen
+  // ---------- resize panel: add/remove toggle ----------
+  let resizeMode = 'add';
+  const RESIZE_BTN_LABEL = {
+    rowTopBtn: 'Row at top', rowBottomBtn: 'Row at bottom',
+    colLeftBtn: 'Column at left', colRightBtn: 'Column at right'
+  };
+
+  function updateResizeUI(){
+    resizeModeAddBtn.classList.toggle('active', resizeMode === 'add');
+    resizeModeRemoveBtn.classList.toggle('active', resizeMode === 'remove');
+    resizeButtonsGroup.classList.toggle('mode-remove', resizeMode === 'remove');
+    [rowTopBtn, rowBottomBtn, colLeftBtn, colRightBtn].forEach(btn => {
+      btn.dataset.confirm = '';
+      btn.textContent = (resizeMode === 'add' ? '+ ' : '− ') + RESIZE_BTN_LABEL[btn.id];
+    });
+  }
+
+  function setResizeMode(mode){
+    resizeMode = mode;
+    updateResizeUI();
+  }
+  resizeModeAddBtn.addEventListener('click', () => setResizeMode('add'));
+  resizeModeRemoveBtn.addEventListener('click', () => setResizeMode('remove'));
+
+  function handleResizeClick(kind, position, btn){
+    if(resizeMode === 'add'){
+      if(kind === 'row') addRow(position, resolveFillIndex(), resolveResizeCount());
+      else addColumn(position, resolveFillIndex(), resolveResizeCount());
+      return;
+    }
+    // remove mode: tap once to arm, tap again within a few seconds to confirm — mirrors the delete pattern on the Home screen
+    if(btn.dataset.confirm === '1'){
+      btn.dataset.confirm = '';
+      if(kind === 'row') removeRow(position, resolveResizeCount());
+      else removeColumn(position, resolveResizeCount());
+      updateResizeUI();
+    } else {
+      btn.dataset.confirm = '1';
+      btn.textContent = 'Sure? Tap again';
+      setTimeout(() => { if(btn.dataset.confirm === '1') updateResizeUI(); }, 2500);
+    }
+  }
+
+  rowTopBtn.addEventListener('click', () => handleResizeClick('row', 'top', rowTopBtn));
+  rowBottomBtn.addEventListener('click', () => handleResizeClick('row', 'bottom', rowBottomBtn));
+  colLeftBtn.addEventListener('click', () => handleResizeClick('column', 'left', colLeftBtn));
+  colRightBtn.addEventListener('click', () => handleResizeClick('column', 'right', colRightBtn));
+  updateResizeUI();
+
+  function updateCurrentRowHighlight(oldRow, newRow){
+    if(!rowLineByLogicalRow) return;
+    const oldEntry = rowLineByLogicalRow[oldRow];
+    if(oldEntry){
+      oldEntry.line.classList.remove('current');
+      oldEntry.line.classList.add('dim');
+      oldEntry.numEl.classList.remove('current');
+    }
+    const newEntry = rowLineByLogicalRow[newRow];
+    if(newEntry){
+      newEntry.line.classList.add('current');
+      newEntry.line.classList.remove('dim');
+      newEntry.numEl.classList.add('current');
+    }
+  }
+
+  function setRow(n){
+    n = Math.max(1, Math.min(state.height, n));
+    if(n === state.currentRow) return;
+    const oldRow = state.currentRow;
+    state.currentRow = n;
+    updateCurrentRowHighlight(oldRow, n); // patch just the two affected rows instead of rebuilding the whole grid
+    renderToolbar();
+    renderRowSummary();
+    scrollCurrentIntoView(true);
+    scheduleSave();
+  }
+
+  // once every stitch in the row you're currently on is checked off, hop to the next row automatically
+  function advanceIfRowComplete(imgRow){
+    if(imgRow !== imageRowFor(state.currentRow) || state.currentRow >= state.height) return;
+    const w = state.width;
+    for(let x=0; x<w; x++){
+      if(!state.marked[imgRow*w + x]) return;
+    }
+    setRow(state.currentRow + 1);
+  }
+
+  // ---------- undo ----------
+  // Entries are typed and as small as possible: marking/painting/recoloring only ever record what
+  // actually changed (a handful of cells, or just the palette) instead of cloning the whole w*h arrays
+  // on every click — full snapshots are reserved for structural changes (add/remove row or column).
+  const UNDO_LIMIT = 40;
+
+  function pushMarkUndo(cellIndices){
+    if(!state) return;
+    undoStack.push({ type:'marks', entries: cellIndices.map(idx => ({ idx, prev: state.marked[idx] })) });
+    if(undoStack.length > UNDO_LIMIT) undoStack.shift();
+    undoBtn.disabled = false;
+  }
+
+  function pushPaintUndo(){
+    if(!state) return null;
+    const entry = { type:'paint', entries: [] };
+    undoStack.push(entry);
+    if(undoStack.length > UNDO_LIMIT) undoStack.shift();
+    undoBtn.disabled = false;
+    return entry;
+  }
+
+  function pushPaletteUndo(){
+    if(!state) return;
+    undoStack.push({ type:'palette', palette: state.palette.slice(), blankIndex: state.blankIndex });
+    if(undoStack.length > UNDO_LIMIT) undoStack.shift();
+    undoBtn.disabled = false;
+  }
+
+  function pushStructuralUndo(){
+    if(!state) return;
+    undoStack.push({
+      type:'full',
+      width: state.width, height: state.height,
+      indices: state.indices.slice(), marked: state.marked.slice(),
+      palette: state.palette.slice(), blankIndex: state.blankIndex,
+      currentRow: state.currentRow
+    });
+    if(undoStack.length > UNDO_LIMIT) undoStack.shift();
+    undoBtn.disabled = false;
+  }
+
+  function resetUndo(){
+    undoStack = [];
+    currentPaintUndoEntry = null;
+    undoBtn.disabled = true;
+  }
+
+  function undoLastChange(){
+    if(!state || undoStack.length === 0) return;
+    const entry = undoStack.pop();
+    undoBtn.disabled = undoStack.length === 0;
+
+    if(entry.type === 'marks'){
+      entry.entries.forEach(e => { setMarked(e.idx, e.prev); updateCellMarkedVisual(e.idx); });
+      renderRowSummary();
+      renderProgress();
+      scheduleSave();
+    } else if(entry.type === 'paint'){
+      entry.entries.forEach(e => { state.indices[e.idx] = e.prev; updateCellColorVisual(e.idx); });
+      renderLegend();
+      renderFillOptions();
+      scheduleSave();
+    } else if(entry.type === 'palette'){
+      state.palette = entry.palette;
+      state.blankIndex = entry.blankIndex;
+      renderGrid();
+      renderLegend();
+      renderFillOptions();
+      if(drawMode) renderDrawPalette();
+      scheduleSave();
+    } else { // 'full' — structural change, restore everything and re-render from scratch
+      state.width = entry.width; state.height = entry.height;
+      state.indices = entry.indices; state.marked = entry.marked;
+      state.palette = entry.palette; state.blankIndex = entry.blankIndex;
+      state.currentRow = Math.max(1, Math.min(state.height, entry.currentRow));
+      renderAll();
+      scrollCurrentIntoView(true);
+      scheduleSave();
+    }
+  }
+  undoBtn.addEventListener('click', undoLastChange);
+
+  function updateCellMarkedVisual(ci){
+    const cell = cellElByIdx && cellElByIdx[ci];
+    if(cell) cell.classList.toggle('marked', !!state.marked[ci]);
+  }
+  function updateCellColorVisual(ci){
+    const cell = cellElByIdx && cellElByIdx[ci];
+    if(cell) cell.style.background = state.palette[state.indices[ci]];
+  }
+  function updateCellsForColor(colorIndex){
+    if(!cellElByIdx) return;
+    const hex = state.palette[colorIndex];
+    for(let i=0; i<state.indices.length; i++){
+      if(state.indices[i] === colorIndex){
+        const cell = cellElByIdx[i];
+        if(cell) cell.style.background = hex;
+      }
+    }
+  }
+
+  // ---------- toolbar interactions ----------
+  prevBtn.addEventListener('click', () => setRow(state.currentRow - 1));
+  nextBtn.addEventListener('click', () => setRow(state.currentRow + 1));
+  rowJump.addEventListener('change', () => setRow(parseInt(rowJump.value,10) || 1));
+  prevBtnBottom.addEventListener('click', () => setRow(state.currentRow - 1));
+  nextBtnBottom.addEventListener('click', () => setRow(state.currentRow + 1));
+  rowJumpBottom.addEventListener('change', () => setRow(parseInt(rowJumpBottom.value,10) || 1));
+  zoomSlider.addEventListener('input', () => { cellSizePx = parseInt(zoomSlider.value,10); renderGrid(); scrollCurrentIntoView(false); });
+  bottomUpToggle.addEventListener('change', () => {
+    if(!state) return;
+    const imgRow = imageRowFor(state.currentRow); // keep pointing at the same physical row
+    state.bottomUp = bottomUpToggle.checked;
+    state.currentRow = state.bottomUp ? (state.height - imgRow) : (imgRow + 1);
+    renderGrid();
+    renderToolbar();
+    renderRowSummary();
+    scrollCurrentIntoView(true);
+    scheduleSave();
+  });
+  rowDirToggle.addEventListener('change', () => {
+    if(!state) return;
+    state.rowDir = rowDirToggle.value;
+    renderToolbar();
+    renderRowSummary();
+    scheduleSave();
+  });
+  chartWrap.addEventListener('keydown', e => {
+    if(e.key === 'ArrowUp'){ e.preventDefault(); setRow(state.currentRow + 1); }
+    if(e.key === 'ArrowDown'){ e.preventDefault(); setRow(state.currentRow - 1); }
+  });
+
+  // ---------- draw / paint mode ----------
+  drawToggleBtn.addEventListener('click', () => {
+    drawMode = !drawMode;
+    drawToggleBtn.classList.toggle('active', drawMode);
+    drawPalette.classList.toggle('active', drawMode);
+    gridColumn.classList.toggle('drawmode', drawMode);
+    if(drawMode) renderDrawPalette();
+  });
+
+  function renderDrawPalette(){
+    drawPalette.innerHTML = '<div class="hint">Pick a color, then click or drag across the chart to paint stitches.</div>';
+    state.palette.forEach((hex, i) => {
+      const sw = document.createElement('div');
+      sw.className = 'draw-swatch' + (i === drawColorIndex ? ' selected' : '');
+      sw.style.background = hex;
+      sw.title = letterFor(i);
+      sw.addEventListener('click', () => { drawColorIndex = i; renderDrawPalette(); });
+      drawPalette.appendChild(sw);
+    });
+    const addWrap = document.createElement('label');
+    addWrap.className = 'draw-addcolor';
+    addWrap.textContent = '+';
+    addWrap.title = 'Add a new color';
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.value = '#ffffff';
+    colorInput.addEventListener('pointerdown', () => pushPaletteUndo(), { once: true });
+    colorInput.addEventListener('input', () => {
+      state.palette.push(colorInput.value.toUpperCase());
+      drawColorIndex = state.palette.length - 1;
+      renderDrawPalette();
+      renderLegend();
+      renderFillOptions();
+      scheduleSave();
+    });
+    addWrap.appendChild(colorInput);
+    drawPalette.appendChild(addWrap);
+  }
+
+  function showChart(){
+    drawMode = false;
+    drawColorIndex = 0;
+    drawToggleBtn.classList.remove('active');
+    drawPalette.classList.remove('active');
+    setupView.classList.add('hidden');
+    homeView.classList.remove('active');
+    chartView.classList.add('active');
+    newProjectBtn.style.display = 'inline-block';
+    renderAll();
+    scrollCurrentIntoView(false);
+  }
+
+  function showSetup(){
+    setupView.classList.remove('hidden');
+    homeView.classList.remove('active');
+    chartView.classList.remove('active');
+    newProjectBtn.style.display = 'none';
+  }
+
+  async function showHome(){
+    setupView.classList.add('hidden');
+    chartView.classList.remove('active');
+    homeView.classList.add('active');
+    newProjectBtn.style.display = 'inline-block';
+    await renderHomeGrid();
+  }
+
+  function resetToNewChart(){
+    state = null;
+    originalImage = null; rotatedCanvas = null; cropRect = null; rotation = 0;
+    chosenCard.style.display = 'none';
+    dropZone.style.display = 'flex';
+    generateBtn.disabled = true;
+    generateBtn.textContent = 'Upload an image first';
+    fileInput.value = '';
+    resetUndo();
+    showSetup();
+  }
+
+  newProjectBtn.addEventListener('click', resetToNewChart);
+  homeBtn.addEventListener('click', showHome);
+  logoHomeBtn.addEventListener('click', showHome);
+
+  // ---------- storage adapter ----------
+  // window.storage is an Artifacts-only API — it doesn't exist when this file is
+  // opened directly in a browser (e.g. from Downloads) or hosted elsewhere. Fall
+  // back to localStorage in that case so saving still works standalone.
+  const storage = (window.storage && typeof window.storage.set === 'function') ? window.storage : (function(){
+    const PREFIX = 'stitchchart:';
+    return {
+      async set(key, value){ localStorage.setItem(PREFIX + key, value); return true; },
+      async get(key){ const v = localStorage.getItem(PREFIX + key); return v === null ? null : { value: v }; },
+      async delete(key){ localStorage.removeItem(PREFIX + key); return true; },
+      async list(prefix){
+        const keys = [];
+        for(let i=0;i<localStorage.length;i++){
+          const k = localStorage.key(i);
+          if(k && k.indexOf(PREFIX + prefix) === 0) keys.push(k.slice(PREFIX.length));
+        }
+        return { keys };
+      }
+    };
+  })();
+
+  // ---------- persistence (multiple saved charts, one write per save) ----------
+  function scheduleSave(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveState, 350);
+  }
+
+  async function saveState(){
+    if(!state) return;
+    clearTimeout(retrySaveTimer);
+    saveStatus.textContent = 'Saving…';
+    saveStatus.classList.remove('error');
+
+    const payload = {
+      id: state.id, name: state.name,
+      width: state.width, height: state.height, numColors: state.numColors,
+      palette: state.palette,
+      indices: encodeIndices(state.indices),
+      marked: encodeMarked(state.marked),
+      currentRow: state.currentRow,
+      bottomUp: state.bottomUp, rowDir: state.rowDir, aspect: state.aspect,
+      blankIndex: state.blankIndex,
+      thumbnail: state.thumbnail,
+      about: state.about,
+      collectionId: state.collectionId,
+      updatedAt: Date.now()
+    };
+
+    try{
+      const result = await storage.set('chart:' + state.id, JSON.stringify(payload), false);
+      if(!result) throw new Error('Storage returned no result');
+      saveStatus.textContent = 'Saved';
+      saveStatus.classList.remove('error');
+      clearTimeout(saveStatusFadeTimer);
+      saveStatusFadeTimer = setTimeout(() => { saveStatus.textContent = ''; }, 1500);
+    } catch(e){
+      console.error('Could not save progress', e);
+      saveStatus.textContent = "Couldn't save just now — will retry";
+      saveStatus.classList.add('error');
+      retrySaveTimer = setTimeout(saveState, 4000);
+    }
+  }
+
+  function stateFromPayload(p){
+    return {
+      id: p.id, name: p.name || 'Untitled chart',
+      width: p.width, height: p.height, numColors: p.numColors,
+      palette: p.palette,
+      indices: decodeIndices(p.indices),
+      marked: p.marked ? decodeMarked(p.marked) : new Array(p.width * p.height).fill(0),
+      currentRow: p.currentRow || 1,
+      bottomUp: p.bottomUp, aspect: p.aspect,
+      // rowDir replaces the old boolean `alternate` field — fall back for charts saved before this existed
+      rowDir: p.rowDir || (p.alternate === false ? 'ltr' : 'alternate'),
+      blankIndex: p.blankIndex,
+      thumbnail: p.thumbnail,
+      about: p.about || { hookSize:'', yarnWeight:'', yarnBrand:'', notes:'' },
+      collectionId: p.collectionId || null
+    };
+  }
+
+  // No separate index key — we list keys with the "chart:" prefix directly,
+  // so there's only ever one write per save and nothing can fall out of sync.
+  async function listAllCharts(){
+    const results = [];
+    let keys = [];
+    try{
+      const res = await storage.list('chart:', false);
+      keys = (res && res.keys) || [];
+    } catch(e){
+      console.error('Could not list saved charts', e);
+      return results;
+    }
+    for(const key of keys){
+      try{
+        const r = await storage.get(key, false);
+        if(r && r.value){
+          const p = JSON.parse(r.value);
+          results.push({ key, id: p.id, name: p.name, width: p.width, height: p.height, palette: p.palette, thumbnail: p.thumbnail, about: p.about, collectionId: p.collectionId || null, updatedAt: p.updatedAt });
+        }
+      } catch(e){ /* skip an entry that failed to read */ }
+    }
+    return results;
+  }
+
+  async function loadProjectById(id){
+    try{
+      const res = await storage.get('chart:' + id, false);
+      if(!res || !res.value) return false;
+      state = stateFromPayload(JSON.parse(res.value));
+      cellSizePx = Math.max(4, Math.min(24, Math.floor(760 / state.width)));
+      zoomSlider.value = cellSizePx;
+      resetUndo();
+      showChart();
+      return true;
+    } catch(e){
+      console.error('Could not load chart', e);
+      return false;
+    }
+  }
+
+  async function deleteProjectById(id){
+    try{ await storage.delete('chart:' + id, false); } catch(e){ /* already gone */ }
+  }
+
+  // patch a saved chart's payload without touching updatedAt — filing a chart into a folder
+  // shouldn't bump it to the top of "most recently updated"
+  async function patchChartPayload(id, patch){
+    try{
+      const res = await storage.get('chart:' + id, false);
+      if(!res || !res.value) return false;
+      const payload = JSON.parse(res.value);
+      Object.assign(payload, patch);
+      await storage.set('chart:' + id, JSON.stringify(payload), false);
+      return true;
+    } catch(e){ return false; }
+  }
+
+  // ---------- folders (organize charts on the Home screen) ----------
+  async function listAllFolders(){
+    const results = [];
+    let keys = [];
+    try{
+      const res = await storage.list('folder:', false);
+      keys = (res && res.keys) || [];
+    } catch(e){ return results; }
+    for(const key of keys){
+      try{
+        const r = await storage.get(key, false);
+        if(r && r.value) results.push(JSON.parse(r.value));
+      } catch(e){ /* skip an entry that failed to read */ }
+    }
+    results.sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+    return results;
+  }
+
+  async function saveFolder(folder){
+    await storage.set('folder:' + folder.id, JSON.stringify(folder), false);
+  }
+
+  async function deleteFolder(id){
+    try{ await storage.delete('folder:' + id, false); } catch(e){ /* already gone */ }
+    const list = await listAllCharts();
+    for(const p of list){
+      if(p.collectionId === id) await patchChartPayload(p.id, { collectionId: null });
+    }
+  }
+
+  // ---------- Home view (all saved charts, as thumbnails) ----------
+  // ---------- fun banner: a stat about your charts + a dad joke (extra helping of cow puns) ----------
+  const DAD_JOKES = [
+    "Why do cows wear bells? Because their horns don't work.",
+    "What do you call a cow with no legs? Ground beef.",
+    "What do you call a sleeping cow? A bulldozer.",
+    "Why did the cow win an award? It was outstanding in its field.",
+    "What do you call a cow that just had a baby? De-calf-inated.",
+    "What do you get from a pampered cow? Spoiled milk.",
+    "Why don't cows have any money? The farmers milk them dry.",
+    "How does a cow do math? With a cow-culator.",
+    "What did the yarn say after a long day? I'm feeling a little unraveled.",
+    "Why did the crocheter never argue? She didn't want to lose the thread.",
+    "I've got way too many loose ends... in my crochet, obviously.",
+    "Why don't skeletons crochet? They just don't have the guts for it."
+  ];
+
+  function pickRandom(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+
+  function buildFunFacts(list){
+    const n = list.length;
+    if(n === 0) return ["No charts yet — your first masterpiece is waiting to happen!"];
+    const totalStitches = list.reduce((sum, p) => sum + ((p.width||0) * (p.height||0)), 0);
+    const totalColors = list.reduce((sum, p) => sum + ((p.palette && p.palette.length) || 0), 0);
+    const hours = Math.max(1, Math.round(totalStitches / 200));
+    const biggest = list.reduce((a, b) => (a.width*a.height >= b.width*b.height ? a : b));
+    return [
+      `You've made ${n} chart${n===1?'':'s'} so far — ${totalStitches.toLocaleString()} stitches and counting!`,
+      `Napkin math: that's roughly ${hours} hour${hours===1?'':'s'} of crocheting across all your charts.`,
+      `You've picked out ${totalColors} color${totalColors===1?'':'s'} in total across your charts.`,
+      `Your biggest chart yet is "${biggest.name || 'Untitled chart'}" at ${biggest.width}×${biggest.height} stitches.`
+    ];
+  }
+
+  let lastChartsList = [];
+  let lastFoldersList = [];
+  let activeFolderId = null; // null = "All charts"
+  function renderFunBanner(){
+    funFactText.textContent = '✨ ' + pickRandom(buildFunFacts(lastChartsList));
+    funJokeText.textContent = '🐄 ' + pickRandom(DAD_JOKES);
+  }
+  funShuffleBtn.addEventListener('click', renderFunBanner);
+
+  function renderContinueBanner(list){
+    if(!list.length){
+      continueBanner.style.display = 'none';
+      continueBanner.onclick = null;
+      return;
+    }
+    const latest = list[0];
+    if(latest.thumbnail) continueThumb.src = latest.thumbnail;
+    else continueThumb.removeAttribute('src');
+    continueName.textContent = latest.name || 'Untitled chart';
+    continueBanner.style.display = 'flex';
+    continueBanner.onclick = () => loadProjectById(latest.id);
+  }
+
+  function renderFolderBar(folders, list){
+    folderBar.innerHTML = '';
+
+    const allChip = document.createElement('div');
+    allChip.className = 'folder-chip' + (activeFolderId === null ? ' active' : '');
+    allChip.textContent = `All charts (${list.length})`;
+    allChip.addEventListener('click', () => { activeFolderId = null; renderHomeGrid(); });
+    folderBar.appendChild(allChip);
+
+    folders.forEach(f => {
+      const count = list.filter(p => p.collectionId === f.id).length;
+      const chip = document.createElement('div');
+      chip.className = 'folder-chip' + (activeFolderId === f.id ? ' active' : '');
+      chip.addEventListener('click', () => { activeFolderId = f.id; renderHomeGrid(); });
+
+      const label = document.createElement('span');
+      label.textContent = `📁 ${f.name} (${count})`;
+      chip.appendChild(label);
+
+      const renameBtn = document.createElement('button');
+      renameBtn.type = 'button';
+      renameBtn.className = 'folder-chip-btn';
+      renameBtn.title = 'Rename folder';
+      renameBtn.textContent = '✎';
+      renameBtn.addEventListener('click', async e => {
+        e.stopPropagation();
+        const name = prompt('Rename folder', f.name);
+        if(name && name.trim()){
+          await saveFolder({ ...f, name: name.trim() });
+          renderHomeGrid();
+        }
+      });
+      chip.appendChild(renameBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'folder-chip-btn';
+      delBtn.title = 'Delete folder';
+      delBtn.textContent = '×';
+      delBtn.addEventListener('click', async e => {
+        e.stopPropagation();
+        if(confirm(`Delete the folder "${f.name}"? Charts inside just become unfiled — nothing is deleted.`)){
+          if(activeFolderId === f.id) activeFolderId = null;
+          await deleteFolder(f.id);
+          renderHomeGrid();
+        }
+      });
+      chip.appendChild(delBtn);
+
+      folderBar.appendChild(chip);
+    });
+
+    const newChip = document.createElement('div');
+    newChip.className = 'folder-chip folder-chip-new';
+    newChip.textContent = '+ New folder';
+    newChip.addEventListener('click', async () => {
+      const name = prompt('Name this folder');
+      if(name && name.trim()){
+        const folder = { id: generateId(), name: name.trim(), createdAt: Date.now() };
+        await saveFolder(folder);
+        activeFolderId = folder.id;
+        renderHomeGrid();
+      }
+    });
+    folderBar.appendChild(newChip);
+  }
+
+  function buildCardFolderSelect(p){
+    const select = document.createElement('select');
+    select.className = 'card-folder-select';
+    select.addEventListener('click', e => e.stopPropagation());
+    select.addEventListener('keydown', e => e.stopPropagation());
+
+    const noneOpt = document.createElement('option');
+    noneOpt.value = '';
+    noneOpt.textContent = '📁 No folder';
+    select.appendChild(noneOpt);
+
+    lastFoldersList.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f.id;
+      opt.textContent = '📁 ' + f.name;
+      if(p.collectionId === f.id) opt.selected = true;
+      select.appendChild(opt);
+    });
+
+    select.addEventListener('change', async () => {
+      await patchChartPayload(p.id, { collectionId: select.value || null });
+      renderHomeGrid();
+    });
+    return select;
+  }
+
+  async function renderHomeGrid(){
+    homeGrid.innerHTML = '<div class="home-empty">Loading your charts…</div>';
+    const [list, folders] = await Promise.all([listAllCharts(), listAllFolders()]);
+    list.sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0));
+    lastChartsList = list;
+    lastFoldersList = folders;
+    renderFunBanner();
+    renderContinueBanner(list);
+    renderFolderBar(folders, list);
+    homeGrid.innerHTML = '';
+
+    const newCard = document.createElement('button');
+    newCard.type = 'button';
+    newCard.className = 'home-card home-newcard';
+    newCard.innerHTML = '<div class="thumbwrap">＋</div><div class="cardmeta"><div class="name">New chart</div></div>';
+    newCard.addEventListener('click', resetToNewChart);
+    homeGrid.appendChild(newCard);
+
+    const visibleList = activeFolderId === null ? list : list.filter(p => p.collectionId === activeFolderId);
+
+    if(visibleList.length === 0){
+      const empty = document.createElement('div');
+      empty.className = 'home-empty';
+      empty.textContent = list.length === 0
+        ? 'No saved charts yet — tap "+ New chart" to make your first one.'
+        : 'No charts in this folder yet — move one in from its card, or tap "All charts".';
+      homeGrid.appendChild(empty);
+      return;
+    }
+
+    visibleList.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'home-card';
+      card.tabIndex = 0;
+
+      const thumbwrap = document.createElement('div');
+      thumbwrap.className = 'thumbwrap';
+      if(p.thumbnail){
+        const img = document.createElement('img');
+        img.src = p.thumbnail;
+        img.alt = '';
+        thumbwrap.appendChild(img);
+      } else {
+        const strip = document.createElement('div');
+        strip.className = 'swatchstrip-big';
+        (p.palette || []).slice(0, 8).forEach(hex => {
+          const sw = document.createElement('span');
+          sw.style.background = hex;
+          strip.appendChild(sw);
+        });
+        thumbwrap.appendChild(strip);
+      }
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'del-btn';
+      delBtn.textContent = '×';
+      delBtn.title = 'Delete chart';
+      delBtn.addEventListener('click', async e => {
+        e.stopPropagation();
+        if(delBtn.dataset.confirm === '1'){
+          await deleteProjectById(p.id);
+          if(state && state.id === p.id) state = null;
+          renderHomeGrid();
+        } else {
+          delBtn.dataset.confirm = '1';
+          delBtn.textContent = '✓';
+          delBtn.title = 'Confirm delete';
+          setTimeout(() => { delBtn.dataset.confirm = ''; delBtn.textContent = '×'; delBtn.title = 'Delete chart'; }, 2500);
+        }
+      });
+      thumbwrap.appendChild(delBtn);
+
+      const meta = document.createElement('div');
+      meta.className = 'cardmeta';
+      const updated = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString(undefined, { month:'short', day:'numeric' }) : '';
+      const hookSize = p.about && p.about.hookSize;
+      const subBits = [`${p.width}×${p.height}`, updated];
+      if(hookSize) subBits.push(escapeHtml(hookSize));
+      meta.innerHTML = `<div class="name">${escapeHtml(p.name || 'Untitled chart')}</div><div class="sub">${subBits.join(' • ')}</div>`;
+      meta.appendChild(buildCardFolderSelect(p));
+
+      card.appendChild(thumbwrap);
+      card.appendChild(meta);
+      const open = () => loadProjectById(p.id);
+      card.addEventListener('click', open);
+      card.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(); } });
+      homeGrid.appendChild(card);
+    });
+  }
+
+  async function loadState(){
+    // migrate a chart saved by an earlier version of this app (single-project key)
+    try{
+      const old = await storage.get('project', false);
+      if(old && old.value){
+        const oldState = JSON.parse(old.value);
+        state = {
+          id: generateId(),
+          name: defaultProjectName(),
+          width: oldState.width, height: oldState.height, numColors: oldState.numColors,
+          palette: oldState.palette,
+          indices: oldState.indices,
+          marked: oldState.marked || new Array(oldState.width * oldState.height).fill(0),
+          currentRow: oldState.currentRow || 1,
+          bottomUp: oldState.bottomUp, aspect: oldState.aspect,
+          rowDir: oldState.alternate === false ? 'ltr' : 'alternate',
+          blankIndex: oldState.blankIndex,
+          about: { hookSize:'', yarnWeight:'', yarnBrand:'', notes:'' },
+          collectionId: null
+        };
+        await saveState();
+        try{ await storage.delete('project', false); } catch(e){ /* ignore */ }
+        state = null; // migrated chart is saved — land on Home like any other chart, not open it
+      }
+    } catch(e){ /* no old-format project — fine */ }
+
+    await showHome();
+  }
+
+  loadState();
+})();
+</script>
+</body>
+</html>
