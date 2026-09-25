@@ -575,8 +575,8 @@
   #grannyView{display:none;}
   #grannyView.active{display:block;}
 
-  .granny-square{position:relative;overflow:hidden;box-sizing:border-box;border-radius:8px;flex-shrink:0;}
-  .granny-square .ring{position:absolute;box-sizing:border-box;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08);}
+  .granny-square{position:relative;overflow:hidden;box-sizing:border-box;border-radius:10px;flex-shrink:0;background:var(--surface);filter:drop-shadow(0 1px 1.5px rgba(0,0,0,0.12));}
+  .granny-square .granny-svg{width:100%;height:100%;display:block;}
   .granny-square-empty{
     border:1px dashed var(--line);background:var(--surface);
     display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:1.1rem;
@@ -619,6 +619,10 @@
   .round-list{flex:1;min-width:200px;display:flex;flex-direction:column;gap:10px;}
   .round-row{display:flex;align-items:center;gap:10px;font-size:0.85rem;}
   .round-row .roundlabel{color:var(--ink-soft);width:96px;flex-shrink:0;}
+  .round-row .chip-wrap{width:28px;height:28px;flex-shrink:0;}
+  .round-row .chip{width:28px;height:28px;border-radius:8px;border:1px solid rgba(0,0,0,0.18);display:block;transition:transform .15s;}
+  .round-row .chip-wrap:hover .chip{transform:scale(1.08);}
+  .round-row .chip-input{width:28px;height:28px;}
   .round-row .round-remove{
     margin-left:auto;background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:0.95rem;padding:4px;
   }
@@ -3008,6 +3012,11 @@
 
   // renders concentric "rounds" (rings) into any element with position:relative — used for the
   // modal preview, the design-palette chips, and each cell of the blueprint grid.
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  // renders concentric "rounds" as a granny square: rounded rings with a visible gap between
+  // each round (like the chain-space you see between rounds in real crochet) and a diagonal
+  // seam radiating to each corner (the classic "X" you get from stacking corner clusters).
   function buildGrannyPreview(container, rounds){
     container.innerHTML = '';
     if(!rounds || rounds.length === 0){
@@ -3017,14 +3026,44 @@
     container.classList.remove('granny-square-empty');
     const n = rounds.length;
     const band = 50 / n;
+    const gap = Math.min(1.6, band * 0.3);
+
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 100 100');
+    svg.setAttribute('class', 'granny-svg');
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
     for(let r = n - 1; r >= 0; r--){ // outermost round first (painted underneath), innermost last (on top)
-      const inset = (n - 1 - r) * band;
-      const ring = document.createElement('div');
-      ring.className = 'ring';
-      ring.style.inset = inset + '%';
-      ring.style.background = rounds[r];
-      container.appendChild(ring);
+      const layer = n - 1 - r; // 0 = outermost
+      const inset = layer * band + layer * gap;
+      const size = Math.max(2, 100 - inset * 2);
+      const rect = document.createElementNS(SVG_NS, 'rect');
+      rect.setAttribute('x', inset);
+      rect.setAttribute('y', inset);
+      rect.setAttribute('width', size);
+      rect.setAttribute('height', size);
+      rect.setAttribute('rx', r === 0 ? size / 2 : Math.min(size * 0.22, 14));
+      rect.setAttribute('fill', rounds[r]);
+      rect.setAttribute('stroke', 'rgba(0,0,0,0.08)');
+      rect.setAttribute('stroke-width', '0.6');
+      svg.appendChild(rect);
     }
+
+    // the diagonal seam lines from center to each corner
+    const seams = document.createElementNS(SVG_NS, 'g');
+    seams.setAttribute('stroke', 'rgba(0,0,0,0.16)');
+    seams.setAttribute('stroke-width', '1');
+    seams.setAttribute('stroke-linecap', 'round');
+    seams.style.mixBlendMode = 'multiply';
+    [[0,0],[100,0],[0,100],[100,100]].forEach(([cx,cy]) => {
+      const line = document.createElementNS(SVG_NS, 'line');
+      line.setAttribute('x1', '50'); line.setAttribute('y1', '50');
+      line.setAttribute('x2', cx); line.setAttribute('y2', cy);
+      seams.appendChild(line);
+    });
+    svg.appendChild(seams);
+
+    container.appendChild(svg);
   }
 
   function defaultGrannyName(){
@@ -3388,10 +3427,16 @@
           continue;
         }
         const rounds = design.rounds, n = rounds.length;
+        const band = cellPx / 2 / n, gap = Math.min(0.6, band * 0.3);
         for(let r = n - 1; r >= 0; r--){
-          const inset = (n - 1 - r) * (cellPx / 2 / n);
+          const layer = n - 1 - r;
+          const inset = layer * band + layer * gap;
+          const size = Math.max(1, cellPx - 2 * inset);
+          const radius = r === 0 ? size / 2 : Math.min(size * 0.22, 4);
           ctx.fillStyle = rounds[r];
-          ctx.fillRect(x0 + inset, y0 + inset, cellPx - 2*inset, cellPx - 2*inset);
+          ctx.beginPath();
+          ctx.roundRect ? ctx.roundRect(x0 + inset, y0 + inset, size, size, radius) : ctx.rect(x0 + inset, y0 + inset, size, size);
+          ctx.fill();
         }
       }
     }
