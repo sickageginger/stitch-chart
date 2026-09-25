@@ -617,8 +617,16 @@
   .square-preview-wrap{flex-shrink:0;}
   .square-preview{width:160px;height:160px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,0.12);}
   .round-list{flex:1;min-width:200px;display:flex;flex-direction:column;gap:10px;}
-  .round-row{display:flex;align-items:center;gap:10px;font-size:0.85rem;}
-  .round-row .roundlabel{color:var(--ink-soft);width:96px;flex-shrink:0;}
+  .round-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;row-gap:8px;font-size:0.85rem;}
+  .round-row .roundlabel{color:var(--ink-soft);width:88px;flex-shrink:0;}
+  .round-row .roundor{color:var(--ink-soft);font-size:0.78rem;flex-shrink:0;}
+  .preset-strip{display:flex;flex-wrap:wrap;gap:5px;}
+  .preset-swatch{
+    width:20px;height:20px;border-radius:6px;border:1px solid rgba(0,0,0,0.15);cursor:pointer;
+    padding:0;flex-shrink:0;transition:transform .15s, box-shadow .15s;
+  }
+  .preset-swatch:hover{transform:scale(1.15);}
+  .preset-swatch.selected{box-shadow:0 0 0 2px var(--panel), 0 0 0 3.5px var(--thread);}
   .round-row .chip-wrap{width:28px;height:28px;flex-shrink:0;}
   .round-row .chip{width:28px;height:28px;border-radius:8px;border:1px solid rgba(0,0,0,0.18);display:block;transition:transform .15s;}
   .round-row .chip-wrap:hover .chip{transform:scale(1.08);}
@@ -1059,6 +1067,8 @@
   let lastGrannyList = [];
   const DEFAULT_GRANNY_ROUNDS = ['#E8879E', '#F4B860', '#FFFFFF'];
   const GRANNY_ADD_PALETTE = ['#E8879E', '#F4B860', '#8FBF8A', '#D46A85', '#F3E9E6', '#5A4A47'];
+  // a spread of common yarn shades offered as one-tap presets in the round editor
+  const GRANNY_PRESET_COLORS = ['#E63946', '#F4A261', '#F9C74F', '#90BE6D', '#43AA8B', '#577590', '#9B5DE5', '#F3E9E6', '#2B2622'];
 
   // ---------- elements ----------
   const el = id => document.getElementById(id);
@@ -3202,19 +3212,64 @@
     squareModal.style.display = 'flex';
   }
 
+  // updates one round's color from either a preset click or the custom picker, without rebuilding
+  // the whole list — rebuilding mid-drag would interrupt the native color picker's interaction.
+  function applyRoundColor(i, hex, row){
+    editingRounds[i] = hex.toUpperCase();
+    const chip = row.querySelector('.chip-wrap .chip');
+    if(chip) chip.style.background = editingRounds[i];
+    row.querySelectorAll('.preset-swatch').forEach(btn => {
+      btn.classList.toggle('selected', btn.dataset.hex === editingRounds[i]);
+    });
+    buildGrannyPreview(squarePreview, editingRounds);
+  }
+
   function renderRoundList(){
     roundList.innerHTML = '';
     editingRounds.forEach((hex, i) => {
+      const upperHex = hex.toUpperCase();
       const row = document.createElement('div');
       row.className = 'round-row';
-      row.innerHTML = `<span class="roundlabel mono">Round ${i+1}${i===0?' (center)':''}</span><label class="chip-wrap"><span class="chip" style="background:${hex}"></span><input type="color" class="chip-input" value="${hex}"></label>`;
-      const colorInput = row.querySelector('.chip-input');
-      const chip = row.querySelector('.chip');
-      colorInput.addEventListener('input', () => {
-        editingRounds[i] = colorInput.value.toUpperCase();
-        chip.style.background = editingRounds[i];
-        buildGrannyPreview(squarePreview, editingRounds);
+
+      const label = document.createElement('span');
+      label.className = 'roundlabel mono';
+      label.textContent = `Round ${i+1}${i===0?' (center)':''}`;
+      row.appendChild(label);
+
+      const presetStrip = document.createElement('div');
+      presetStrip.className = 'preset-strip';
+      GRANNY_PRESET_COLORS.forEach(presetHex => {
+        const p = document.createElement('button');
+        p.type = 'button';
+        p.className = 'preset-swatch' + (presetHex === upperHex ? ' selected' : '');
+        p.style.background = presetHex;
+        p.dataset.hex = presetHex;
+        p.title = presetHex;
+        p.addEventListener('click', () => applyRoundColor(i, presetHex, row));
+        presetStrip.appendChild(p);
       });
+      row.appendChild(presetStrip);
+
+      const orLabel = document.createElement('span');
+      orLabel.className = 'roundor';
+      orLabel.textContent = 'or';
+      row.appendChild(orLabel);
+
+      const chipWrap = document.createElement('label');
+      chipWrap.className = 'chip-wrap';
+      chipWrap.title = 'Custom colour';
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.style.background = hex;
+      const colorInput = document.createElement('input');
+      colorInput.type = 'color';
+      colorInput.className = 'chip-input';
+      colorInput.value = hex;
+      colorInput.addEventListener('input', () => applyRoundColor(i, colorInput.value, row));
+      chipWrap.appendChild(chip);
+      chipWrap.appendChild(colorInput);
+      row.appendChild(chipWrap);
+
       if(editingRounds.length > 1){
         const rm = document.createElement('button');
         rm.type = 'button';
