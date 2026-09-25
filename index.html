@@ -3052,7 +3052,7 @@
       rect.setAttribute('y', inset);
       rect.setAttribute('width', size);
       rect.setAttribute('height', size);
-      rect.setAttribute('rx', r === 0 ? size / 2 : Math.min(size * 0.22, 14));
+      rect.setAttribute('rx', Math.min(size * 0.22, 14));
       rect.setAttribute('fill', rounds[r]);
       rect.setAttribute('stroke', 'rgba(0,0,0,0.08)');
       rect.setAttribute('stroke-width', '0.6');
@@ -3233,7 +3233,7 @@
 
       const label = document.createElement('span');
       label.className = 'roundlabel mono';
-      label.textContent = `Round ${i+1}${i===0?' (center)':''}`;
+      label.textContent = `Round ${i+1}`;
       row.appendChild(label);
 
       const presetStrip = document.createElement('div');
@@ -3487,7 +3487,7 @@
           const layer = n - 1 - r;
           const inset = layer * band + layer * gap;
           const size = Math.max(1, cellPx - 2 * inset);
-          const radius = r === 0 ? size / 2 : Math.min(size * 0.22, 4);
+          const radius = Math.min(size * 0.22, 4);
           ctx.fillStyle = rounds[r];
           ctx.beginPath();
           ctx.roundRect ? ctx.roundRect(x0 + inset, y0 + inset, size, size, radius) : ctx.rect(x0 + inset, y0 + inset, size, size);
