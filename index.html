@@ -547,6 +547,70 @@
     font-size:0.85rem;z-index:400;box-shadow:0 8px 24px rgba(0,0,0,0.28);max-width:90vw;text-align:center;
   }
   .global-toast.error{background:var(--bad);}
+
+  /* ---- Home: pixel / granny type tabs ---- */
+  .type-tabs{display:flex;gap:8px;margin-bottom:16px;}
+  .type-tab{
+    padding:8px 16px;border-radius:20px;border:1px solid var(--line);background:var(--panel);
+    color:var(--ink-soft);font-size:0.85rem;cursor:pointer;font-family:'Quicksand',sans-serif;
+  }
+  .type-tab:hover{border-color:var(--thread);color:var(--thread);}
+  .type-tab.active{background:var(--thread);border-color:var(--thread);color:#fff;}
+
+  /* ---- Granny square planner ---- */
+  #grannySetupView{display:none;}
+  #grannySetupView.active{display:block;}
+  #grannyView{display:none;}
+  #grannyView.active{display:block;}
+
+  .granny-square{position:relative;overflow:hidden;box-sizing:border-box;border-radius:8px;flex-shrink:0;}
+  .granny-square .ring{position:absolute;box-sizing:border-box;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.08);}
+  .granny-square-empty{
+    border:1px dashed var(--line);background:var(--surface);
+    display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:1.1rem;
+  }
+
+  .design-palette{
+    display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;margin-bottom:18px;padding:14px;
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  }
+  .design-palette .hint{font-size:0.78rem;color:var(--ink-soft);width:100%;margin-bottom:2px;}
+  .design-chip{
+    display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px;border-radius:12px;
+    border:2px solid transparent;cursor:pointer;background:var(--surface);width:80px;position:relative;
+    font-family:'Quicksand',sans-serif;
+  }
+  .design-chip:hover{border-color:var(--line);}
+  .design-chip.active{border-color:var(--thread);}
+  .design-chip .chipname{font-size:0.72rem;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px;}
+  .design-chip .chipcount{font-size:0.68rem;color:var(--ink-soft);}
+  .design-chip .chip-edit-btn{
+    position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;border:none;
+    background:var(--panel);color:var(--ink-soft);font-size:0.65rem;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;
+  }
+  .design-chip:hover .chip-edit-btn{opacity:1;}
+  .design-chip-new{border:1px dashed var(--line);color:var(--ink-soft);justify-content:center;min-height:64px;}
+  .design-chip-new:hover{border-color:var(--thread);color:var(--thread);}
+
+  .granny-grid{display:grid;gap:5px;}
+  .granny-cell{cursor:pointer;}
+  .granny-cell:hover{box-shadow:0 0 0 2px var(--thread);}
+  .granny-cell.done::after{
+    content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,0.6);color:var(--good);font-size:1.4rem;font-weight:700;
+  }
+
+  .square-editor{display:flex;gap:20px;flex-wrap:wrap;margin-top:10px;}
+  .square-preview-wrap{flex-shrink:0;}
+  .square-preview{width:160px;height:160px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,0.12);}
+  .round-list{flex:1;min-width:200px;display:flex;flex-direction:column;gap:10px;}
+  .round-row{display:flex;align-items:center;gap:10px;font-size:0.85rem;}
+  .round-row .roundlabel{color:var(--ink-soft);width:96px;flex-shrink:0;}
+  .round-row .round-remove{
+    margin-left:auto;background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:0.95rem;padding:4px;
+  }
+  .round-row .round-remove:hover{color:var(--bad);}
 </style>
 </head>
 <body>
@@ -561,7 +625,7 @@
       </svg>
       <div>
         <h1>Stitch Chart</h1>
-        <p>Turn a photo into a crochet pixel chart, and keep your place row by row.</p>
+        <p>Turn a photo into a crochet pixel chart, or plan a granny square blanket — and keep your place as you go.</p>
       </div>
     </button>
     <div class="header-actions">
@@ -576,6 +640,10 @@
   <div id="homeView">
     <div class="home-head">
       <h2>Your charts</h2>
+    </div>
+    <div class="type-tabs" id="typeTabs">
+      <button type="button" class="type-tab active" id="pixelTab">🧶 Pixel grids</button>
+      <button type="button" class="type-tab" id="grannyTab">🌼 Granny squares</button>
     </div>
     <button type="button" class="continue-banner" id="continueBanner" style="display:none;">
       <img class="continue-thumb" id="continueThumb" alt="">
@@ -672,6 +740,28 @@
     </div>
   </div>
 
+  <div id="grannySetupView">
+    <div class="panel">
+      <h2 style="margin-bottom:6px;">Plan a granny square blanket</h2>
+      <p style="color:var(--ink-soft);font-size:0.88rem;margin:0 0 20px;max-width:520px;">Build a library of granny square designs — how many rounds, and what color each round is — then stamp them onto a grid to blueprint the whole blanket.</p>
+      <div class="field">
+        <label>Blueprint size (squares)</label>
+        <div class="row">
+          <div>
+            <label class="mono" style="margin-bottom:4px;">Across</label>
+            <input type="number" id="grannyColsInput" min="1" max="30" value="5">
+          </div>
+          <div>
+            <label class="mono" style="margin-bottom:4px;">Down</label>
+            <input type="number" id="grannyRowsInput" min="1" max="30" value="4">
+          </div>
+        </div>
+      </div>
+      <div class="aspecthint" style="margin-bottom:6px;">Don't worry about getting this exact — you can add or remove squares any time.</div>
+      <button class="generate-btn" id="grannyCreateBtn">🌼 Start blueprint</button>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="cropModal" style="display:none;">
     <div class="modal-panel">
       <div class="modal-header">
@@ -694,6 +784,28 @@
       </div>
       <div class="cropHint">Drag the box to move it, or the corners to resize. The chart is generated from what's inside the box.</div>
       <button type="button" class="generate-btn" id="doneCropBtn" style="margin-top:14px;">Use this crop ✓</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="squareModal" style="display:none;">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2 id="squareModalTitle">New square design</h2>
+        <button type="button" class="modal-close" id="squareModalCloseBtn" aria-label="Close">×</button>
+      </div>
+      <div class="field">
+        <label for="squareNameInput">Design name</label>
+        <input type="text" id="squareNameInput" placeholder="e.g. Sunset colorway">
+      </div>
+      <div class="square-editor">
+        <div class="square-preview-wrap"><div class="granny-square square-preview" id="squarePreview"></div></div>
+        <div class="round-list" id="roundList"></div>
+      </div>
+      <button type="button" class="blank-grid-btn" id="addRoundBtn" style="margin-top:12px;">+ Add round</button>
+      <div class="crop-toolbar" style="margin-top:16px;">
+        <button type="button" class="linklike" id="deleteSquareDesignBtn">Delete design</button>
+        <button type="button" class="generate-btn" id="saveSquareDesignBtn" style="margin-top:0;width:auto;padding:9px 20px;">Save design ✓</button>
+      </div>
     </div>
   </div>
 
@@ -806,6 +918,72 @@
     </div>
   </div>
 
+  <div id="grannyView">
+    <div class="project-row">
+      <input type="text" id="grannyNameInput" class="project-name-input" placeholder="Untitled blanket">
+      <button type="button" class="save-now-btn" id="grannySaveNowBtn">💾 Save</button>
+      <button type="button" class="save-now-btn" id="grannyExportBtn">⬇ Export backup</button>
+      <button type="button" class="save-now-btn" id="grannyAboutToggleBtn">ℹ️ About</button>
+      <span class="save-status" id="grannySaveStatus"></span>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" id="grannyProgressFill"></div></div>
+      <span class="progress-label" id="grannyProgressLabel">0%</span>
+    </div>
+
+    <div class="about-panel" id="grannyAboutPanel">
+      <div class="about-grid">
+        <div class="field">
+          <label for="grannyHookSizeInput">Hook size</label>
+          <input type="text" id="grannyHookSizeInput" placeholder="e.g. 4.5mm / G-7">
+        </div>
+        <div class="field">
+          <label for="grannyYarnWeightInput">Yarn weight</label>
+          <input type="text" id="grannyYarnWeightInput" placeholder="e.g. Worsted / Aran">
+        </div>
+        <div class="field">
+          <label for="grannyYarnBrandInput">Yarn brand &amp; colorway</label>
+          <input type="text" id="grannyYarnBrandInput" placeholder="e.g. Lion Brand Vanna's Choice — Cherry Red">
+        </div>
+      </div>
+      <div class="field">
+        <label for="grannyNotesInput">Notes</label>
+        <textarea id="grannyNotesInput" rows="3" placeholder="Gauge, joining method, care instructions, anything else worth remembering..."></textarea>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="resize-mode-toggle" id="grannyModeToggle">
+        <button type="button" class="mode-btn active" id="grannyModePlaceBtn" data-mode="place">🧩 Place squares</button>
+        <button type="button" class="mode-btn" id="grannyModeMarkBtn" data-mode="mark">✓ Mark made</button>
+      </div>
+      <button type="button" class="newproj-btn" id="grannyNewDesignBtn">+ New square design</button>
+    </div>
+
+    <div class="design-palette" id="designPalette"></div>
+
+    <div class="chartwrap" id="grannyGridWrap">
+      <div class="granny-grid" id="grannyGrid"></div>
+    </div>
+
+    <div class="resize-panel">
+      <h3>Resize the blueprint</h3>
+      <div class="resize-row">
+        <div class="resize-mode-toggle" id="grannyResizeModeToggle">
+          <button type="button" class="mode-btn active" id="grannyResizeAddBtn" data-mode="add">+ Add</button>
+          <button type="button" class="mode-btn" id="grannyResizeRemoveBtn" data-mode="remove">− Remove</button>
+        </div>
+      </div>
+      <div class="resize-buttons" id="grannyResizeButtonsGroup">
+        <button type="button" id="grannyRowTopBtn">Row at top</button>
+        <button type="button" id="grannyRowBottomBtn">Row at bottom</button>
+        <button type="button" id="grannyColLeftBtn">Column at left</button>
+        <button type="button" id="grannyColRightBtn">Column at right</button>
+      </div>
+    </div>
+  </div>
+
   <div class="stitch-tooltip" id="stitchTooltip" style="display:none;"></div>
   <div class="global-toast" id="globalToast" style="display:none;"></div>
 
@@ -835,6 +1013,21 @@
   let cellElByIdx = null;          // flat array, cellIdx -> its <div class="cell"> — lets marking/painting/recoloring
   let rowLineByLogicalRow = null;  // patch the DOM directly instead of rebuilding all 52k+ cells on every change
   let markedCount = 0;             // cached total of state.marked, kept in sync by setMarked() — avoids an O(n) scan per click
+
+  // ---------- granny square planner state ----------
+  let granny = null;               // { id, name, cols, rows, designs:[{id,name,rounds:[hex,...]}], layout:[designId|null,...], completed:[0/1,...], activeDesignId, thumbnail, about, updatedAt }
+  let currentMode = 'pixel';       // 'pixel' | 'granny' — which project type the "+ New" button and Home tab currently point at
+  let activeType = 'pixel';        // which Home tab is showing
+  let grannyMode = 'place';        // 'place' | 'mark' — blueprint grid click behavior
+  let grannyResizeMode = 'add';
+  let editingDesignId = null;      // id being edited in the square modal, or null when creating a new one
+  let editingRounds = null;        // working copy of round colors while the square modal is open
+  let grannySaveTimer = null;
+  let grannyRetrySaveTimer = null;
+  let grannySaveStatusFadeTimer = null;
+  let lastGrannyList = [];
+  const DEFAULT_GRANNY_ROUNDS = ['#E8879E', '#F4B860', '#FFFFFF'];
+  const GRANNY_ADD_PALETTE = ['#E8879E', '#F4B860', '#8FBF8A', '#D46A85', '#F3E9E6', '#5A4A47'];
 
   // ---------- elements ----------
   const el = id => document.getElementById(id);
@@ -877,6 +1070,22 @@
   const rowTopBtn = el('rowTopBtn'), rowBottomBtn = el('rowBottomBtn'), colLeftBtn = el('colLeftBtn'), colRightBtn = el('colRightBtn');
   const resizeButtonsGroup = el('resizeButtonsGroup');
   const resizeModeAddBtn = el('resizeModeAddBtn'), resizeModeRemoveBtn = el('resizeModeRemoveBtn');
+
+  // ---------- granny square elements ----------
+  const typeTabs = el('typeTabs'), pixelTab = el('pixelTab'), grannyTab = el('grannyTab');
+  const grannySetupView = el('grannySetupView'), grannyView = el('grannyView');
+  const grannyColsInput = el('grannyColsInput'), grannyRowsInput = el('grannyRowsInput'), grannyCreateBtn = el('grannyCreateBtn');
+  const grannyNameInput = el('grannyNameInput'), grannySaveNowBtn = el('grannySaveNowBtn'), grannyExportBtn = el('grannyExportBtn');
+  const grannyAboutToggleBtn = el('grannyAboutToggleBtn'), grannyAboutPanel = el('grannyAboutPanel'), grannySaveStatus = el('grannySaveStatus');
+  const grannyProgressFill = el('grannyProgressFill'), grannyProgressLabel = el('grannyProgressLabel');
+  const grannyHookSizeInput = el('grannyHookSizeInput'), grannyYarnWeightInput = el('grannyYarnWeightInput'), grannyYarnBrandInput = el('grannyYarnBrandInput'), grannyNotesInput = el('grannyNotesInput');
+  const grannyModePlaceBtn = el('grannyModePlaceBtn'), grannyModeMarkBtn = el('grannyModeMarkBtn'), grannyNewDesignBtn = el('grannyNewDesignBtn');
+  const designPalette = el('designPalette'), grannyGrid = el('grannyGrid');
+  const grannyResizeAddBtn = el('grannyResizeAddBtn'), grannyResizeRemoveBtn = el('grannyResizeRemoveBtn'), grannyResizeButtonsGroup = el('grannyResizeButtonsGroup');
+  const grannyRowTopBtn = el('grannyRowTopBtn'), grannyRowBottomBtn = el('grannyRowBottomBtn'), grannyColLeftBtn = el('grannyColLeftBtn'), grannyColRightBtn = el('grannyColRightBtn');
+  const squareModal = el('squareModal'), squareModalTitle = el('squareModalTitle'), squareModalCloseBtn = el('squareModalCloseBtn');
+  const squareNameInput = el('squareNameInput'), squarePreview = el('squarePreview'), roundList = el('roundList'), addRoundBtn = el('addRoundBtn');
+  const deleteSquareDesignBtn = el('deleteSquareDesignBtn'), saveSquareDesignBtn = el('saveSquareDesignBtn');
 
   // ---------- letters for palette ----------
   function letterFor(i){
@@ -1333,6 +1542,15 @@
     reader.onload = e => {
       try{
         const p = JSON.parse(e.target.result);
+        if(p.type === 'granny'){
+          granny = grannyStateFromPayload(p);
+          granny.id = generateId(); // always import as a new project, never overwrite an existing save
+          granny.name = (granny.name || 'Untitled blanket') + ' (imported)';
+          showGrannyEditor();
+          saveGrannyState();
+          showToast('Blueprint imported.');
+          return;
+        }
         state = stateFromPayload(p);
         state.id = generateId(); // always import as a new chart, never overwrite an existing save
         state.name = (state.name || 'Untitled chart') + ' (imported)';
@@ -2121,15 +2339,23 @@
     drawPalette.appendChild(addWrap);
   }
 
+  function syncNewProjectBtnLabel(){
+    newProjectBtn.textContent = currentMode === 'granny' ? '+ New blueprint' : '+ New chart';
+  }
+
   function showChart(){
+    currentMode = 'pixel';
     drawMode = false;
     drawColorIndex = 0;
     drawToggleBtn.classList.remove('active');
     drawPalette.classList.remove('active');
     setupView.classList.add('hidden');
     homeView.classList.remove('active');
+    grannySetupView.classList.remove('active');
+    grannyView.classList.remove('active');
     chartView.classList.add('active');
     newProjectBtn.style.display = 'inline-block';
+    syncNewProjectBtnLabel();
     renderAll();
     scrollCurrentIntoView(false);
   }
@@ -2138,18 +2364,47 @@
     setupView.classList.remove('hidden');
     homeView.classList.remove('active');
     chartView.classList.remove('active');
+    grannySetupView.classList.remove('active');
+    grannyView.classList.remove('active');
     newProjectBtn.style.display = 'none';
   }
 
   async function showHome(){
+    currentMode = activeType;
     setupView.classList.add('hidden');
     chartView.classList.remove('active');
+    grannySetupView.classList.remove('active');
+    grannyView.classList.remove('active');
     homeView.classList.add('active');
     newProjectBtn.style.display = 'inline-block';
+    syncNewProjectBtnLabel();
     await renderHomeGrid();
   }
 
+  function showGrannySetup(){
+    currentMode = 'granny';
+    setupView.classList.add('hidden');
+    homeView.classList.remove('active');
+    chartView.classList.remove('active');
+    grannyView.classList.remove('active');
+    grannySetupView.classList.add('active');
+    newProjectBtn.style.display = 'none';
+  }
+
+  function showGrannyEditor(){
+    currentMode = 'granny';
+    setupView.classList.add('hidden');
+    homeView.classList.remove('active');
+    chartView.classList.remove('active');
+    grannySetupView.classList.remove('active');
+    grannyView.classList.add('active');
+    newProjectBtn.style.display = 'inline-block';
+    syncNewProjectBtnLabel();
+    renderGrannyAll();
+  }
+
   function resetToNewChart(){
+    currentMode = 'pixel';
     state = null;
     originalImage = null; rotatedCanvas = null; cropRect = null; rotation = 0;
     chosenCard.style.display = 'none';
@@ -2161,7 +2416,10 @@
     showSetup();
   }
 
-  newProjectBtn.addEventListener('click', resetToNewChart);
+  newProjectBtn.addEventListener('click', () => {
+    if(currentMode === 'granny') resetToNewGranny();
+    else resetToNewChart();
+  });
   homeBtn.addEventListener('click', showHome);
   logoHomeBtn.addEventListener('click', showHome);
 
@@ -2352,42 +2610,55 @@
 
   function pickRandom(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
 
-  function buildFunFacts(list){
+  function buildFunFacts(list, grannyList){
+    grannyList = grannyList || [];
     const n = list.length;
-    if(n === 0) return ["No charts yet — your first masterpiece is waiting to happen!"];
-    const totalStitches = list.reduce((sum, p) => sum + ((p.width||0) * (p.height||0)), 0);
-    const totalColors = list.reduce((sum, p) => sum + ((p.palette && p.palette.length) || 0), 0);
-    const hours = Math.max(1, Math.round(totalStitches / 200));
-    const biggest = list.reduce((a, b) => (a.width*a.height >= b.width*b.height ? a : b));
-    return [
-      `You've made ${n} chart${n===1?'':'s'} so far — ${totalStitches.toLocaleString()} stitches and counting!`,
-      `Napkin math: that's roughly ${hours} hour${hours===1?'':'s'} of crocheting across all your charts.`,
-      `You've picked out ${totalColors} color${totalColors===1?'':'s'} in total across your charts.`,
-      `Your biggest chart yet is "${biggest.name || 'Untitled chart'}" at ${biggest.width}×${biggest.height} stitches.`
-    ];
+    if(n === 0 && grannyList.length === 0) return ["No projects yet — your first masterpiece is waiting to happen!"];
+    const facts = [];
+    if(n > 0){
+      const totalStitches = list.reduce((sum, p) => sum + ((p.width||0) * (p.height||0)), 0);
+      const totalColors = list.reduce((sum, p) => sum + ((p.palette && p.palette.length) || 0), 0);
+      const hours = Math.max(1, Math.round(totalStitches / 200));
+      const biggest = list.reduce((a, b) => (a.width*a.height >= b.width*b.height ? a : b));
+      facts.push(
+        `You've made ${n} chart${n===1?'':'s'} so far — ${totalStitches.toLocaleString()} stitches and counting!`,
+        `Napkin math: that's roughly ${hours} hour${hours===1?'':'s'} of crocheting across all your charts.`,
+        `You've picked out ${totalColors} color${totalColors===1?'':'s'} in total across your charts.`,
+        `Your biggest chart yet is "${biggest.name || 'Untitled chart'}" at ${biggest.width}×${biggest.height} stitches.`
+      );
+    }
+    if(grannyList.length > 0){
+      const totalSquares = grannyList.reduce((sum,p) => sum + ((p.cols||0) * (p.rows||0)), 0);
+      facts.push(`You're blueprinting ${grannyList.length} blanket${grannyList.length===1?'':'s'} out of granny squares — ${totalSquares.toLocaleString()} squares planned so far.`);
+    }
+    return facts;
   }
 
   let lastChartsList = [];
   let lastFoldersList = [];
   let activeFolderId = null; // null = "All charts"
   function renderFunBanner(){
-    funFactText.textContent = '✨ ' + pickRandom(buildFunFacts(lastChartsList));
+    funFactText.textContent = '✨ ' + pickRandom(buildFunFacts(lastChartsList, lastGrannyList));
     funJokeText.textContent = '🐄 ' + pickRandom(DAD_JOKES);
   }
   funShuffleBtn.addEventListener('click', renderFunBanner);
 
-  function renderContinueBanner(list){
-    if(!list.length){
+  function renderContinueBanner(list, grannyList){
+    const merged = [
+      ...list.map(p => ({ ...p, _type:'pixel' })),
+      ...(grannyList||[]).map(p => ({ ...p, _type:'granny' }))
+    ].sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0));
+    if(!merged.length){
       continueBanner.style.display = 'none';
       continueBanner.onclick = null;
       return;
     }
-    const latest = list[0];
+    const latest = merged[0];
     if(latest.thumbnail) continueThumb.src = latest.thumbnail;
     else continueThumb.removeAttribute('src');
-    continueName.textContent = latest.name || 'Untitled chart';
+    continueName.textContent = latest.name || (latest._type === 'granny' ? 'Untitled blanket' : 'Untitled chart');
     continueBanner.style.display = 'flex';
-    continueBanner.onclick = () => loadProjectById(latest.id);
+    continueBanner.onclick = () => latest._type === 'granny' ? loadGrannyById(latest.id) : loadProjectById(latest.id);
   }
 
   function renderFolderBar(folders, list){
@@ -2483,94 +2754,171 @@
     return select;
   }
 
+  function buildPixelCard(p){
+    const card = document.createElement('div');
+    card.className = 'home-card';
+    card.tabIndex = 0;
+
+    const thumbwrap = document.createElement('div');
+    thumbwrap.className = 'thumbwrap';
+    if(p.thumbnail){
+      const img = document.createElement('img');
+      img.src = p.thumbnail;
+      img.alt = '';
+      thumbwrap.appendChild(img);
+    } else {
+      const strip = document.createElement('div');
+      strip.className = 'swatchstrip-big';
+      (p.palette || []).slice(0, 8).forEach(hex => {
+        const sw = document.createElement('span');
+        sw.style.background = hex;
+        strip.appendChild(sw);
+      });
+      thumbwrap.appendChild(strip);
+    }
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'del-btn';
+    delBtn.textContent = '×';
+    delBtn.title = 'Delete chart';
+    delBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      if(delBtn.dataset.confirm === '1'){
+        await deleteProjectById(p.id);
+        if(state && state.id === p.id) state = null;
+        renderHomeGrid();
+      } else {
+        delBtn.dataset.confirm = '1';
+        delBtn.textContent = '✓';
+        delBtn.title = 'Confirm delete';
+        setTimeout(() => { delBtn.dataset.confirm = ''; delBtn.textContent = '×'; delBtn.title = 'Delete chart'; }, 2500);
+      }
+    });
+    thumbwrap.appendChild(delBtn);
+
+    const meta = document.createElement('div');
+    meta.className = 'cardmeta';
+    const updated = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString(undefined, { month:'short', day:'numeric' }) : '';
+    const hookSize = p.about && p.about.hookSize;
+    const subBits = [`${p.width}×${p.height}`, updated];
+    if(hookSize) subBits.push(escapeHtml(hookSize));
+    meta.innerHTML = `<div class="name">${escapeHtml(p.name || 'Untitled chart')}</div><div class="sub">${subBits.join(' • ')}</div>`;
+    meta.appendChild(buildCardFolderSelect(p));
+
+    card.appendChild(thumbwrap);
+    card.appendChild(meta);
+    const open = () => loadProjectById(p.id);
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(); } });
+    return card;
+  }
+
+  function buildGrannyCard(p){
+    const card = document.createElement('div');
+    card.className = 'home-card';
+    card.tabIndex = 0;
+
+    const thumbwrap = document.createElement('div');
+    thumbwrap.className = 'thumbwrap';
+    if(p.thumbnail){
+      const img = document.createElement('img');
+      img.src = p.thumbnail;
+      img.alt = '';
+      thumbwrap.appendChild(img);
+    } else {
+      const strip = document.createElement('div');
+      strip.className = 'swatchstrip-big';
+      (p.designs || []).slice(0, 8).forEach(d => {
+        const sw = document.createElement('span');
+        sw.style.background = (d.rounds && d.rounds[d.rounds.length-1]) || '#eee';
+        strip.appendChild(sw);
+      });
+      thumbwrap.appendChild(strip);
+    }
+
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'del-btn';
+    delBtn.textContent = '×';
+    delBtn.title = 'Delete blueprint';
+    delBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      if(delBtn.dataset.confirm === '1'){
+        await deleteGrannyById(p.id);
+        if(granny && granny.id === p.id) granny = null;
+        renderHomeGrid();
+      } else {
+        delBtn.dataset.confirm = '1';
+        delBtn.textContent = '✓';
+        delBtn.title = 'Confirm delete';
+        setTimeout(() => { delBtn.dataset.confirm = ''; delBtn.textContent = '×'; delBtn.title = 'Delete blueprint'; }, 2500);
+      }
+    });
+    thumbwrap.appendChild(delBtn);
+
+    const meta = document.createElement('div');
+    meta.className = 'cardmeta';
+    const updated = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString(undefined, { month:'short', day:'numeric' }) : '';
+    const subBits = [`${p.cols}×${p.rows} squares`, updated];
+    meta.innerHTML = `<div class="name">${escapeHtml(p.name || 'Untitled blanket')}</div><div class="sub">${subBits.join(' • ')}</div>`;
+
+    card.appendChild(thumbwrap);
+    card.appendChild(meta);
+    const open = () => loadGrannyById(p.id);
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(); } });
+    return card;
+  }
+
+  function renderTypeTabs(){
+    pixelTab.classList.toggle('active', activeType === 'pixel');
+    grannyTab.classList.toggle('active', activeType === 'granny');
+    folderBar.style.display = activeType === 'pixel' ? 'flex' : 'none';
+  }
+  pixelTab.addEventListener('click', () => { activeType = 'pixel'; renderHomeGrid(); });
+  grannyTab.addEventListener('click', () => { activeType = 'granny'; renderHomeGrid(); });
+
   async function renderHomeGrid(){
-    homeGrid.innerHTML = '<div class="home-empty">Loading your charts…</div>';
-    const [list, folders] = await Promise.all([listAllCharts(), listAllFolders()]);
-    list.sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0));
-    lastChartsList = list;
+    homeGrid.innerHTML = '<div class="home-empty">Loading your projects…</div>';
+    const [pixelList, folders, grannyList] = await Promise.all([listAllCharts(), listAllFolders(), listAllGrannies()]);
+    pixelList.sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0));
+    grannyList.sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0));
+    lastChartsList = pixelList;
     lastFoldersList = folders;
+    lastGrannyList = grannyList;
+    renderTypeTabs();
     renderFunBanner();
-    renderContinueBanner(list);
-    renderFolderBar(folders, list);
+    renderContinueBanner(pixelList, grannyList);
+    if(activeType === 'pixel') renderFolderBar(folders, pixelList);
     homeGrid.innerHTML = '';
 
     const newCard = document.createElement('button');
     newCard.type = 'button';
     newCard.className = 'home-card home-newcard';
-    newCard.innerHTML = '<div class="thumbwrap">＋</div><div class="cardmeta"><div class="name">New chart</div></div>';
-    newCard.addEventListener('click', resetToNewChart);
+    newCard.innerHTML = `<div class="thumbwrap">＋</div><div class="cardmeta"><div class="name">${activeType === 'granny' ? 'New blueprint' : 'New chart'}</div></div>`;
+    newCard.addEventListener('click', () => { activeType === 'granny' ? resetToNewGranny() : resetToNewChart(); });
     homeGrid.appendChild(newCard);
 
-    const visibleList = activeFolderId === null ? list : list.filter(p => p.collectionId === activeFolderId);
+    const list = activeType === 'pixel' ? pixelList : grannyList;
+    const visibleList = activeType === 'pixel'
+      ? (activeFolderId === null ? list : list.filter(p => p.collectionId === activeFolderId))
+      : list;
 
     if(visibleList.length === 0){
       const empty = document.createElement('div');
       empty.className = 'home-empty';
-      empty.textContent = list.length === 0
-        ? 'No saved charts yet — tap "+ New chart" to make your first one.'
-        : 'No charts in this folder yet — move one in from its card, or tap "All charts".';
+      empty.textContent = activeType === 'granny'
+        ? 'No blanket plans yet — tap "+ New blueprint" to start one.'
+        : (list.length === 0
+          ? 'No saved charts yet — tap "+ New chart" to make your first one.'
+          : 'No charts in this folder yet — move one in from its card, or tap "All charts".');
       homeGrid.appendChild(empty);
       return;
     }
 
     visibleList.forEach(p => {
-      const card = document.createElement('div');
-      card.className = 'home-card';
-      card.tabIndex = 0;
-
-      const thumbwrap = document.createElement('div');
-      thumbwrap.className = 'thumbwrap';
-      if(p.thumbnail){
-        const img = document.createElement('img');
-        img.src = p.thumbnail;
-        img.alt = '';
-        thumbwrap.appendChild(img);
-      } else {
-        const strip = document.createElement('div');
-        strip.className = 'swatchstrip-big';
-        (p.palette || []).slice(0, 8).forEach(hex => {
-          const sw = document.createElement('span');
-          sw.style.background = hex;
-          strip.appendChild(sw);
-        });
-        thumbwrap.appendChild(strip);
-      }
-
-      const delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.className = 'del-btn';
-      delBtn.textContent = '×';
-      delBtn.title = 'Delete chart';
-      delBtn.addEventListener('click', async e => {
-        e.stopPropagation();
-        if(delBtn.dataset.confirm === '1'){
-          await deleteProjectById(p.id);
-          if(state && state.id === p.id) state = null;
-          renderHomeGrid();
-        } else {
-          delBtn.dataset.confirm = '1';
-          delBtn.textContent = '✓';
-          delBtn.title = 'Confirm delete';
-          setTimeout(() => { delBtn.dataset.confirm = ''; delBtn.textContent = '×'; delBtn.title = 'Delete chart'; }, 2500);
-        }
-      });
-      thumbwrap.appendChild(delBtn);
-
-      const meta = document.createElement('div');
-      meta.className = 'cardmeta';
-      const updated = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString(undefined, { month:'short', day:'numeric' }) : '';
-      const hookSize = p.about && p.about.hookSize;
-      const subBits = [`${p.width}×${p.height}`, updated];
-      if(hookSize) subBits.push(escapeHtml(hookSize));
-      meta.innerHTML = `<div class="name">${escapeHtml(p.name || 'Untitled chart')}</div><div class="sub">${subBits.join(' • ')}</div>`;
-      meta.appendChild(buildCardFolderSelect(p));
-
-      card.appendChild(thumbwrap);
-      card.appendChild(meta);
-      const open = () => loadProjectById(p.id);
-      card.addEventListener('click', open);
-      card.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); open(); } });
-      homeGrid.appendChild(card);
+      homeGrid.appendChild(activeType === 'pixel' ? buildPixelCard(p) : buildGrannyCard(p));
     });
   }
 
@@ -2602,6 +2950,508 @@
 
     await showHome();
   }
+
+  // ---------- granny square planner ----------
+
+  // renders concentric "rounds" (rings) into any element with position:relative — used for the
+  // modal preview, the design-palette chips, and each cell of the blueprint grid.
+  function buildGrannyPreview(container, rounds){
+    container.innerHTML = '';
+    if(!rounds || rounds.length === 0){
+      container.classList.add('granny-square-empty');
+      return;
+    }
+    container.classList.remove('granny-square-empty');
+    const n = rounds.length;
+    const band = 50 / n;
+    for(let r = n - 1; r >= 0; r--){ // outermost round first (painted underneath), innermost last (on top)
+      const inset = (n - 1 - r) * band;
+      const ring = document.createElement('div');
+      ring.className = 'ring';
+      ring.style.inset = inset + '%';
+      ring.style.background = rounds[r];
+      container.appendChild(ring);
+    }
+  }
+
+  function defaultGrannyName(){
+    return 'Blanket ' + new Date().toLocaleDateString(undefined, { month:'short', day:'numeric' });
+  }
+
+  function resetToNewGranny(){
+    granny = null;
+    showGrannySetup();
+  }
+
+  grannyCreateBtn.addEventListener('click', () => {
+    const cols = Math.max(1, Math.min(30, parseInt(grannyColsInput.value,10) || 5));
+    const rows = Math.max(1, Math.min(30, parseInt(grannyRowsInput.value,10) || 4));
+    granny = {
+      id: generateId(),
+      name: defaultGrannyName(),
+      cols, rows,
+      designs: [],
+      layout: new Array(cols * rows).fill(null),
+      completed: new Array(cols * rows).fill(0),
+      activeDesignId: null,
+      thumbnail: undefined,
+      about: { hookSize:'', yarnWeight:'', yarnBrand:'', notes:'' },
+      updatedAt: Date.now()
+    };
+    showGrannyEditor();
+    saveGrannyState();
+  });
+
+  function renderGrannyAll(){
+    grannyNameInput.value = granny.name || '';
+    renderGrannyAbout();
+    renderDesignPalette();
+    renderGrannyGrid();
+  }
+
+  grannyNameInput.addEventListener('input', () => {
+    if(!granny) return;
+    granny.name = grannyNameInput.value.trim() || 'Untitled blanket';
+    scheduleGrannySave();
+  });
+
+  grannyAboutToggleBtn.addEventListener('click', () => grannyAboutPanel.classList.toggle('open'));
+
+  function renderGrannyAbout(){
+    const about = granny.about || {};
+    grannyHookSizeInput.value = about.hookSize || '';
+    grannyYarnWeightInput.value = about.yarnWeight || '';
+    grannyYarnBrandInput.value = about.yarnBrand || '';
+    grannyNotesInput.value = about.notes || '';
+  }
+  function bindGrannyAboutField(input, key){
+    input.addEventListener('input', () => {
+      if(!granny) return;
+      if(!granny.about) granny.about = {};
+      granny.about[key] = input.value;
+      scheduleGrannySave();
+    });
+  }
+  bindGrannyAboutField(grannyHookSizeInput, 'hookSize');
+  bindGrannyAboutField(grannyYarnWeightInput, 'yarnWeight');
+  bindGrannyAboutField(grannyYarnBrandInput, 'yarnBrand');
+  bindGrannyAboutField(grannyNotesInput, 'notes');
+
+  // ---------- design library (stamp palette) ----------
+  function renderDesignPalette(){
+    designPalette.innerHTML = '';
+    if(!granny.designs.length){
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = 'No square designs yet — tap "+ New square design" to choose rounds and colors, then stamp it onto the grid below.';
+      designPalette.appendChild(hint);
+    }
+    const counts = {};
+    granny.layout.forEach(id => { if(id) counts[id] = (counts[id]||0) + 1; });
+
+    granny.designs.forEach(d => {
+      const chip = document.createElement('div');
+      chip.className = 'design-chip' + (granny.activeDesignId === d.id ? ' active' : '');
+      const sq = document.createElement('div');
+      sq.className = 'granny-square';
+      sq.style.width = '48px'; sq.style.height = '48px';
+      buildGrannyPreview(sq, d.rounds);
+      chip.appendChild(sq);
+      const nm = document.createElement('div');
+      nm.className = 'chipname';
+      nm.textContent = d.name || 'Untitled';
+      chip.appendChild(nm);
+      const ct = document.createElement('div');
+      ct.className = 'chipcount';
+      ct.textContent = (counts[d.id] || 0) + ' used';
+      chip.appendChild(ct);
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'chip-edit-btn';
+      editBtn.textContent = '✎';
+      editBtn.title = 'Edit design';
+      editBtn.addEventListener('click', e => { e.stopPropagation(); openSquareModal(d.id); });
+      chip.appendChild(editBtn);
+      chip.addEventListener('click', () => { granny.activeDesignId = d.id; renderDesignPalette(); });
+      designPalette.appendChild(chip);
+    });
+
+    const eraseChip = document.createElement('div');
+    eraseChip.className = 'design-chip design-chip-new' + (granny.activeDesignId === null ? ' active' : '');
+    eraseChip.innerHTML = '<div style="font-size:1.3rem;">⌫</div><div class="chipname">Eraser</div>';
+    eraseChip.addEventListener('click', () => { granny.activeDesignId = null; renderDesignPalette(); });
+    designPalette.appendChild(eraseChip);
+
+    const newChip = document.createElement('div');
+    newChip.className = 'design-chip design-chip-new';
+    newChip.innerHTML = '<div style="font-size:1.3rem;">＋</div><div class="chipname">New design</div>';
+    newChip.addEventListener('click', () => openSquareModal(null));
+    designPalette.appendChild(newChip);
+  }
+  grannyNewDesignBtn.addEventListener('click', () => openSquareModal(null));
+
+  // ---------- square design modal ----------
+  function openSquareModal(designId){
+    editingDesignId = designId || null;
+    if(editingDesignId){
+      const d = granny.designs.find(x => x.id === editingDesignId);
+      editingRounds = d.rounds.slice();
+      squareNameInput.value = d.name || '';
+      squareModalTitle.textContent = 'Edit square design';
+      deleteSquareDesignBtn.style.display = 'inline-block';
+    } else {
+      editingRounds = DEFAULT_GRANNY_ROUNDS.slice();
+      squareNameInput.value = '';
+      squareModalTitle.textContent = 'New square design';
+      deleteSquareDesignBtn.style.display = 'none';
+    }
+    renderRoundList();
+    buildGrannyPreview(squarePreview, editingRounds);
+    squareModal.style.display = 'flex';
+  }
+
+  function renderRoundList(){
+    roundList.innerHTML = '';
+    editingRounds.forEach((hex, i) => {
+      const row = document.createElement('div');
+      row.className = 'round-row';
+      row.innerHTML = `<span class="roundlabel mono">Round ${i+1}${i===0?' (center)':''}</span><label class="chip-wrap"><span class="chip" style="background:${hex}"></span><input type="color" class="chip-input" value="${hex}"></label>`;
+      const colorInput = row.querySelector('.chip-input');
+      const chip = row.querySelector('.chip');
+      colorInput.addEventListener('input', () => {
+        editingRounds[i] = colorInput.value.toUpperCase();
+        chip.style.background = editingRounds[i];
+        buildGrannyPreview(squarePreview, editingRounds);
+      });
+      if(editingRounds.length > 1){
+        const rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'round-remove';
+        rm.textContent = '✕';
+        rm.title = 'Remove round';
+        rm.addEventListener('click', () => {
+          editingRounds.splice(i, 1);
+          renderRoundList();
+          buildGrannyPreview(squarePreview, editingRounds);
+        });
+        row.appendChild(rm);
+      }
+      roundList.appendChild(row);
+    });
+  }
+
+  addRoundBtn.addEventListener('click', () => {
+    editingRounds.push(GRANNY_ADD_PALETTE[editingRounds.length % GRANNY_ADD_PALETTE.length]);
+    renderRoundList();
+    buildGrannyPreview(squarePreview, editingRounds);
+  });
+
+  saveSquareDesignBtn.addEventListener('click', () => {
+    if(!granny) return;
+    const name = squareNameInput.value.trim() || ('Design ' + (granny.designs.length + 1));
+    if(editingDesignId){
+      const d = granny.designs.find(x => x.id === editingDesignId);
+      d.name = name;
+      d.rounds = editingRounds.slice();
+    } else {
+      const d = { id: generateId(), name, rounds: editingRounds.slice() };
+      granny.designs.push(d);
+      granny.activeDesignId = d.id;
+    }
+    squareModal.style.display = 'none';
+    renderDesignPalette();
+    renderGrannyGrid();
+    scheduleGrannySave();
+  });
+
+  deleteSquareDesignBtn.addEventListener('click', () => {
+    if(!editingDesignId || !granny) return;
+    if(!confirm('Delete this square design? Any squares using it in your blueprint will become empty.')) return;
+    granny.designs = granny.designs.filter(d => d.id !== editingDesignId);
+    granny.layout = granny.layout.map(id => id === editingDesignId ? null : id);
+    if(granny.activeDesignId === editingDesignId) granny.activeDesignId = granny.designs[0] ? granny.designs[0].id : null;
+    squareModal.style.display = 'none';
+    renderDesignPalette();
+    renderGrannyGrid();
+    scheduleGrannySave();
+  });
+
+  function closeSquareModal(){ squareModal.style.display = 'none'; }
+  squareModalCloseBtn.addEventListener('click', closeSquareModal);
+  squareModal.addEventListener('click', e => { if(e.target === squareModal) closeSquareModal(); });
+
+  // ---------- blueprint grid ----------
+  function renderGrannyGrid(){
+    grannyGrid.innerHTML = '';
+    const cellPx = 56;
+    grannyGrid.style.gridTemplateColumns = `repeat(${granny.cols}, ${cellPx}px)`;
+    for(let row = 0; row < granny.rows; row++){
+      for(let col = 0; col < granny.cols; col++){
+        const idx = row * granny.cols + col;
+        const cell = document.createElement('div');
+        cell.className = 'granny-cell granny-square';
+        cell.style.width = cellPx + 'px';
+        cell.style.height = cellPx + 'px';
+        const designId = granny.layout[idx];
+        const design = designId ? granny.designs.find(d => d.id === designId) : null;
+        buildGrannyPreview(cell, design ? design.rounds : null);
+        if(granny.completed[idx]) cell.classList.add('done');
+        cell.addEventListener('click', () => handleGrannyCellClick(idx));
+        grannyGrid.appendChild(cell);
+      }
+    }
+    renderGrannyProgress();
+  }
+
+  function handleGrannyCellClick(idx){
+    if(grannyMode === 'place'){
+      granny.layout[idx] = granny.activeDesignId;
+      granny.completed[idx] = 0; // placing/clearing a design resets that square's progress
+    } else {
+      if(!granny.layout[idx]){ showToast('Place a square design here first.', true); return; }
+      granny.completed[idx] = granny.completed[idx] ? 0 : 1;
+    }
+    renderGrannyGrid();
+    renderDesignPalette(); // usage counts may have changed
+    scheduleGrannySave();
+  }
+
+  function renderGrannyProgress(){
+    const total = granny.cols * granny.rows;
+    const done = granny.completed.reduce((s,v) => s + (v ? 1 : 0), 0);
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    grannyProgressFill.style.width = pct + '%';
+    grannyProgressLabel.textContent = pct + '%';
+  }
+
+  function setGrannyMode(m){
+    grannyMode = m;
+    grannyModePlaceBtn.classList.toggle('active', m === 'place');
+    grannyModeMarkBtn.classList.toggle('active', m === 'mark');
+  }
+  grannyModePlaceBtn.addEventListener('click', () => setGrannyMode('place'));
+  grannyModeMarkBtn.addEventListener('click', () => setGrannyMode('mark'));
+
+  // ---------- resize the blueprint (reuses the same generic insert/remove helpers as the pixel chart) ----------
+  const GRANNY_RESIZE_LABEL = { grannyRowTopBtn:'Row at top', grannyRowBottomBtn:'Row at bottom', grannyColLeftBtn:'Column at left', grannyColRightBtn:'Column at right' };
+  const GRANNY_MAX_DIM = 60;
+
+  function grannyAddRow(position){
+    if(granny.rows >= GRANNY_MAX_DIM){ showToast("That's plenty of squares already!", true); return; }
+    const w = granny.cols;
+    granny.layout = insertRowInto(granny.layout, w, position, null);
+    granny.completed = insertRowInto(granny.completed, w, position, 0);
+    granny.rows += 1;
+    renderGrannyGrid();
+    scheduleGrannySave();
+  }
+  function grannyAddCol(position){
+    if(granny.cols >= GRANNY_MAX_DIM){ showToast("That's plenty of squares already!", true); return; }
+    const w = granny.cols, h = granny.rows;
+    granny.layout = insertColInto(granny.layout, w, h, position, null);
+    granny.completed = insertColInto(granny.completed, w, h, position, 0);
+    granny.cols += 1;
+    renderGrannyGrid();
+    scheduleGrannySave();
+  }
+  function grannyRemoveRow(position){
+    if(granny.rows <= 1){ showToast("Can't remove — the blueprint needs at least one row of squares.", true); return; }
+    const w = granny.cols;
+    granny.layout = removeRowFrom(granny.layout, w, position, 1);
+    granny.completed = removeRowFrom(granny.completed, w, position, 1);
+    granny.rows -= 1;
+    renderGrannyGrid();
+    scheduleGrannySave();
+  }
+  function grannyRemoveCol(position){
+    if(granny.cols <= 1){ showToast("Can't remove — the blueprint needs at least one column of squares.", true); return; }
+    const w = granny.cols, h = granny.rows;
+    granny.layout = removeColFrom(granny.layout, w, h, position);
+    granny.completed = removeColFrom(granny.completed, w, h, position);
+    granny.cols -= 1;
+    renderGrannyGrid();
+    scheduleGrannySave();
+  }
+
+  function updateGrannyResizeUI(){
+    grannyResizeAddBtn.classList.toggle('active', grannyResizeMode === 'add');
+    grannyResizeRemoveBtn.classList.toggle('active', grannyResizeMode === 'remove');
+    grannyResizeButtonsGroup.classList.toggle('mode-remove', grannyResizeMode === 'remove');
+    [grannyRowTopBtn, grannyRowBottomBtn, grannyColLeftBtn, grannyColRightBtn].forEach(btn => {
+      btn.dataset.confirm = '';
+      btn.textContent = (grannyResizeMode === 'add' ? '+ ' : '− ') + GRANNY_RESIZE_LABEL[btn.id];
+    });
+  }
+  grannyResizeAddBtn.addEventListener('click', () => { grannyResizeMode = 'add'; updateGrannyResizeUI(); });
+  grannyResizeRemoveBtn.addEventListener('click', () => { grannyResizeMode = 'remove'; updateGrannyResizeUI(); });
+
+  function handleGrannyResizeClick(kind, position, btn){
+    if(grannyResizeMode === 'add'){
+      if(kind === 'row') grannyAddRow(position); else grannyAddCol(position);
+      return;
+    }
+    if(btn.dataset.confirm === '1'){
+      btn.dataset.confirm = '';
+      if(kind === 'row') grannyRemoveRow(position); else grannyRemoveCol(position);
+      updateGrannyResizeUI();
+    } else {
+      btn.dataset.confirm = '1';
+      btn.textContent = 'Sure? Tap again';
+      setTimeout(() => { if(btn.dataset.confirm === '1') updateGrannyResizeUI(); }, 2500);
+    }
+  }
+  grannyRowTopBtn.addEventListener('click', () => handleGrannyResizeClick('row', 'top', grannyRowTopBtn));
+  grannyRowBottomBtn.addEventListener('click', () => handleGrannyResizeClick('row', 'bottom', grannyRowBottomBtn));
+  grannyColLeftBtn.addEventListener('click', () => handleGrannyResizeClick('column', 'left', grannyColLeftBtn));
+  grannyColRightBtn.addEventListener('click', () => handleGrannyResizeClick('column', 'right', grannyColRightBtn));
+  updateGrannyResizeUI();
+
+  // ---------- thumbnail (home card + continue banner) ----------
+  function makeGrannyThumbnail(){
+    if(!granny || !granny.cols || !granny.rows) return undefined;
+    const cellPx = 20;
+    const w = granny.cols * cellPx, h = granny.rows * cellPx;
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, w, h);
+    for(let row = 0; row < granny.rows; row++){
+      for(let col = 0; col < granny.cols; col++){
+        const idx = row * granny.cols + col;
+        const designId = granny.layout[idx];
+        const design = designId ? granny.designs.find(d => d.id === designId) : null;
+        const x0 = col * cellPx, y0 = row * cellPx;
+        if(!design || !design.rounds.length){
+          ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+          ctx.strokeRect(x0 + 1, y0 + 1, cellPx - 2, cellPx - 2);
+          continue;
+        }
+        const rounds = design.rounds, n = rounds.length;
+        for(let r = n - 1; r >= 0; r--){
+          const inset = (n - 1 - r) * (cellPx / 2 / n);
+          ctx.fillStyle = rounds[r];
+          ctx.fillRect(x0 + inset, y0 + inset, cellPx - 2*inset, cellPx - 2*inset);
+        }
+      }
+    }
+    return canvas.toDataURL('image/png');
+  }
+
+  // ---------- persistence ----------
+  function scheduleGrannySave(){
+    clearTimeout(grannySaveTimer);
+    grannySaveTimer = setTimeout(saveGrannyState, 350);
+  }
+
+  grannySaveNowBtn.addEventListener('click', () => { clearTimeout(grannySaveTimer); saveGrannyState(); });
+
+  async function saveGrannyState(){
+    if(!granny) return;
+    clearTimeout(grannyRetrySaveTimer);
+    grannySaveStatus.textContent = 'Saving…';
+    grannySaveStatus.classList.remove('error');
+    granny.thumbnail = makeGrannyThumbnail();
+
+    const payload = {
+      id: granny.id, name: granny.name, type: 'granny',
+      cols: granny.cols, rows: granny.rows,
+      designs: granny.designs,
+      layout: granny.layout,
+      completed: granny.completed,
+      thumbnail: granny.thumbnail,
+      about: granny.about,
+      updatedAt: Date.now()
+    };
+
+    try{
+      const result = await storage.set('granny:' + granny.id, JSON.stringify(payload), false);
+      if(!result) throw new Error('Storage returned no result');
+      grannySaveStatus.textContent = 'Saved';
+      grannySaveStatus.classList.remove('error');
+      clearTimeout(grannySaveStatusFadeTimer);
+      grannySaveStatusFadeTimer = setTimeout(() => { grannySaveStatus.textContent = ''; }, 1500);
+    } catch(e){
+      console.error('Could not save blueprint', e);
+      grannySaveStatus.textContent = "Couldn't save just now — will retry";
+      grannySaveStatus.classList.add('error');
+      grannyRetrySaveTimer = setTimeout(saveGrannyState, 4000);
+    }
+  }
+
+  function grannyStateFromPayload(p){
+    const cols = p.cols || 1, rows = p.rows || 1;
+    return {
+      id: p.id, name: p.name || 'Untitled blanket',
+      cols, rows,
+      designs: p.designs || [],
+      layout: (p.layout && p.layout.length === cols*rows) ? p.layout : new Array(cols*rows).fill(null),
+      completed: (p.completed && p.completed.length === cols*rows) ? p.completed : new Array(cols*rows).fill(0),
+      activeDesignId: (p.designs && p.designs[0]) ? p.designs[0].id : null,
+      thumbnail: p.thumbnail,
+      about: p.about || { hookSize:'', yarnWeight:'', yarnBrand:'', notes:'' },
+      updatedAt: p.updatedAt
+    };
+  }
+
+  async function listAllGrannies(){
+    const results = [];
+    let keys = [];
+    try{
+      const res = await storage.list('granny:', false);
+      keys = (res && res.keys) || [];
+    } catch(e){
+      console.error('Could not list saved blueprints', e);
+      return results;
+    }
+    for(const key of keys){
+      try{
+        const r = await storage.get(key, false);
+        if(r && r.value){
+          const p = JSON.parse(r.value);
+          results.push({ key, id: p.id, name: p.name, cols: p.cols, rows: p.rows, designs: p.designs, thumbnail: p.thumbnail, about: p.about, updatedAt: p.updatedAt });
+        }
+      } catch(e){ /* skip an entry that failed to read */ }
+    }
+    return results;
+  }
+
+  async function loadGrannyById(id){
+    try{
+      const res = await storage.get('granny:' + id, false);
+      if(!res || !res.value) return false;
+      granny = grannyStateFromPayload(JSON.parse(res.value));
+      showGrannyEditor();
+      return true;
+    } catch(e){
+      console.error('Could not load blueprint', e);
+      return false;
+    }
+  }
+
+  async function deleteGrannyById(id){
+    try{ await storage.delete('granny:' + id, false); } catch(e){ /* already gone */ }
+  }
+
+  grannyExportBtn.addEventListener('click', () => {
+    if(!granny) return;
+    const payload = {
+      id: granny.id, name: granny.name, type: 'granny',
+      cols: granny.cols, rows: granny.rows,
+      designs: granny.designs, layout: granny.layout, completed: granny.completed,
+      thumbnail: granny.thumbnail, about: granny.about, exportedAt: Date.now()
+    };
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = (granny.name || 'granny-blueprint').replace(/[^a-z0-9\- _]/gi, '').trim().replace(/\s+/g, '-') || 'granny-blueprint';
+    a.href = url;
+    a.download = safeName + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
 
   loadState();
 })();
