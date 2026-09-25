@@ -582,6 +582,24 @@
     display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:1.1rem;
   }
 
+  .panel-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
+  .panel-tab{
+    display:flex;align-items:center;gap:5px;padding:7px 12px;border-radius:20px;
+    border:1px solid var(--line);background:var(--panel);color:var(--ink-soft);
+    font-size:0.83rem;cursor:pointer;font-family:'Quicksand',sans-serif;
+    transition:border-color .15s, color .15s, background .15s;
+  }
+  .panel-tab:hover{border-color:var(--thread);color:var(--thread);}
+  .panel-tab.active{background:var(--thread);border-color:var(--thread);color:#fff;}
+  .panel-tab.active .panel-tab-btn{color:#fff;}
+  .panel-tab-btn{
+    background:none;border:none;padding:0 1px;cursor:pointer;color:var(--ink-soft);
+    font-size:0.78rem;line-height:1;opacity:0.65;
+  }
+  .panel-tab-btn:hover{opacity:1;}
+  .panel-tab-new{border-style:dashed;}
+  .panel-tab-new:hover{border-color:var(--thread);color:var(--thread);}
+
   .design-palette{
     display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;margin-bottom:18px;padding:14px;
     background:var(--panel);border:1px solid var(--line);border-radius:14px;
@@ -787,9 +805,9 @@
   <div id="grannySetupView">
     <div class="panel">
       <h2 style="margin-bottom:6px;">Plan a granny square blanket</h2>
-      <p style="color:var(--ink-soft);font-size:0.88rem;margin:0 0 20px;max-width:520px;">Build a library of granny square designs — how many rounds, and what color each round is — then stamp them onto a grid to blueprint the whole blanket.</p>
+      <p style="color:var(--ink-soft);font-size:0.88rem;margin:0 0 20px;max-width:520px;">Build a library of granny square designs — how many rounds, and what color each round is — then stamp them onto a grid to blueprint the whole blanket. Add more panels once you're in — handy for planning a front and back, or a few separate pieces.</p>
       <div class="field">
-        <label>Blueprint size (squares)</label>
+        <label>First panel's size (squares)</label>
         <div class="row">
           <div>
             <label class="mono" style="margin-bottom:4px;">Across</label>
@@ -997,6 +1015,8 @@
       </div>
     </div>
 
+    <div class="panel-tabs" id="panelTabs"></div>
+
     <div class="toolbar">
       <div class="resize-mode-toggle" id="grannyModeToggle">
         <button type="button" class="mode-btn active" id="grannyModePlaceBtn" data-mode="place">🧩 Place squares</button>
@@ -1013,7 +1033,7 @@
     </div>
 
     <div class="resize-panel">
-      <h3>Resize the blueprint</h3>
+      <h3>Resize this panel</h3>
       <div class="resize-row">
         <div class="resize-mode-toggle" id="grannyResizeModeToggle">
           <button type="button" class="mode-btn active" id="grannyResizeAddBtn" data-mode="add">+ Add</button>
@@ -1132,6 +1152,7 @@
   const grannyProgressFill = el('grannyProgressFill'), grannyProgressLabel = el('grannyProgressLabel');
   const grannyHookSizeInput = el('grannyHookSizeInput'), grannyYarnWeightInput = el('grannyYarnWeightInput'), grannyYarnBrandInput = el('grannyYarnBrandInput'), grannyNotesInput = el('grannyNotesInput');
   const grannyModePlaceBtn = el('grannyModePlaceBtn'), grannyModeEditBtn = el('grannyModeEditBtn'), grannyModeMarkBtn = el('grannyModeMarkBtn'), grannyNewDesignBtn = el('grannyNewDesignBtn');
+  const panelTabs = el('panelTabs');
   const designPalette = el('designPalette'), grannyGrid = el('grannyGrid');
   const grannyResizeAddBtn = el('grannyResizeAddBtn'), grannyResizeRemoveBtn = el('grannyResizeRemoveBtn'), grannyResizeButtonsGroup = el('grannyResizeButtonsGroup');
   const grannyRowTopBtn = el('grannyRowTopBtn'), grannyRowBottomBtn = el('grannyRowBottomBtn'), grannyColLeftBtn = el('grannyColLeftBtn'), grannyColRightBtn = el('grannyColRightBtn');
@@ -2667,6 +2688,15 @@
 
   function pickRandom(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
 
+  // granny-square summaries from listAllGrannies() may be old-format (top-level cols/rows, no
+  // panels array) if that project hasn't been opened and re-saved since panels shipped.
+  function grannyPanelsOf(p){
+    return (p.panels && p.panels.length) ? p.panels : (p.cols ? [{ cols: p.cols, rows: p.rows }] : []);
+  }
+  function grannyTotalSquares(p){
+    return grannyPanelsOf(p).reduce((s,pl) => s + ((pl.cols||0) * (pl.rows||0)), 0);
+  }
+
   function buildFunFacts(list, grannyList){
     grannyList = grannyList || [];
     const n = list.length;
@@ -2685,7 +2715,7 @@
       );
     }
     if(grannyList.length > 0){
-      const totalSquares = grannyList.reduce((sum,p) => sum + ((p.cols||0) * (p.rows||0)), 0);
+      const totalSquares = grannyList.reduce((sum,p) => sum + grannyTotalSquares(p), 0);
       facts.push(`You're blueprinting ${grannyList.length} blanket${grannyList.length===1?'':'s'} out of granny squares — ${totalSquares.toLocaleString()} squares planned so far.`);
     }
     return facts;
@@ -2917,7 +2947,9 @@
     const meta = document.createElement('div');
     meta.className = 'cardmeta';
     const updated = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString(undefined, { month:'short', day:'numeric' }) : '';
-    const subBits = [`${p.cols}×${p.rows} squares`, updated];
+    const panels = grannyPanelsOf(p);
+    const sizeBit = panels.length > 1 ? `${panels.length} panels` : `${grannyTotalSquares(p)} squares`;
+    const subBits = [sizeBit, updated];
     meta.innerHTML = `<div class="name">${escapeHtml(p.name || 'Untitled blanket')}</div><div class="sub">${subBits.join(' • ')}</div>`;
 
     card.appendChild(thumbwrap);
@@ -3094,16 +3126,30 @@
     showGrannySetup();
   }
 
+  function makeGrannyPanel(name, cols, rows){
+    return {
+      id: generateId(), name,
+      cols, rows,
+      layout: new Array(cols * rows).fill(null),
+      completed: new Array(cols * rows).fill(0)
+    };
+  }
+
+  // the panel currently shown in the blueprint grid — every project always has at least one
+  function activePanel(){
+    return granny.panels.find(p => p.id === granny.activePanelId) || granny.panels[0];
+  }
+
   grannyCreateBtn.addEventListener('click', () => {
     const cols = Math.max(1, Math.min(30, parseInt(grannyColsInput.value,10) || 5));
     const rows = Math.max(1, Math.min(30, parseInt(grannyRowsInput.value,10) || 4));
+    const firstPanel = makeGrannyPanel('Panel 1', cols, rows);
     granny = {
       id: generateId(),
       name: defaultGrannyName(),
-      cols, rows,
       designs: [],
-      layout: new Array(cols * rows).fill(null),
-      completed: new Array(cols * rows).fill(0),
+      panels: [firstPanel],
+      activePanelId: firstPanel.id,
       activeDesignId: null,
       thumbnail: undefined,
       about: { hookSize:'', yarnWeight:'', yarnBrand:'', notes:'' },
@@ -3114,9 +3160,95 @@
     saveGrannyState();
   });
 
+  // ---------- panels (independent blueprint grids within one project, e.g. a front and back) ----------
+  function renderPanelTabs(){
+    panelTabs.innerHTML = '';
+    granny.panels.forEach(p => {
+      const tab = document.createElement('div');
+      tab.className = 'panel-tab' + (p.id === granny.activePanelId ? ' active' : '');
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = p.name;
+      tab.appendChild(nameSpan);
+
+      const renameBtn = document.createElement('button');
+      renameBtn.type = 'button';
+      renameBtn.className = 'panel-tab-btn';
+      renameBtn.title = 'Rename panel';
+      renameBtn.textContent = '✎';
+      renameBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        const name = prompt('Rename panel', p.name);
+        if(name && name.trim()){ p.name = name.trim(); renderPanelTabs(); scheduleGrannySave(); }
+      });
+      tab.appendChild(renameBtn);
+
+      if(granny.panels.length > 1){
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'panel-tab-btn';
+        delBtn.title = 'Delete panel';
+        delBtn.textContent = '×';
+        delBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          if(delBtn.dataset.confirm === '1') deleteGrannyPanel(p.id);
+          else {
+            delBtn.dataset.confirm = '1';
+            delBtn.textContent = '✓';
+            delBtn.title = 'Confirm delete';
+            setTimeout(() => { delBtn.dataset.confirm = ''; delBtn.textContent = '×'; delBtn.title = 'Delete panel'; }, 2500);
+          }
+        });
+        tab.appendChild(delBtn);
+      }
+
+      tab.addEventListener('click', () => switchGrannyPanel(p.id));
+      panelTabs.appendChild(tab);
+    });
+
+    const newTab = document.createElement('div');
+    newTab.className = 'panel-tab panel-tab-new';
+    newTab.textContent = '+ New panel';
+    newTab.addEventListener('click', addGrannyPanel);
+    panelTabs.appendChild(newTab);
+  }
+
+  function switchGrannyPanel(id){
+    if(granny.activePanelId === id) return;
+    granny.activePanelId = id;
+    renderPanelTabs();
+    renderGrannyGrid(); // a different panel is an entirely different grid — full rebuild is correct here
+    scheduleGrannySave(); // persist which panel to reopen to; skips the thumbnail redraw (nothing drawable changed)
+  }
+
+  function addGrannyPanel(){
+    const defaultName = 'Panel ' + (granny.panels.length + 1);
+    const name = prompt('Name this panel (e.g. "Front", "Back")', defaultName);
+    if(name === null) return; // cancelled
+    const src = activePanel();
+    const newPanel = makeGrannyPanel(name.trim() || defaultName, src ? src.cols : 5, src ? src.rows : 4);
+    granny.panels.push(newPanel);
+    granny.activePanelId = newPanel.id;
+    grannyThumbnailDirty = true;
+    renderPanelTabs();
+    renderGrannyGrid();
+    scheduleGrannySave();
+  }
+
+  function deleteGrannyPanel(id){
+    if(granny.panels.length <= 1) return; // the UI already hides the delete button in this case
+    granny.panels = granny.panels.filter(p => p.id !== id);
+    if(granny.activePanelId === id) granny.activePanelId = granny.panels[0].id;
+    grannyThumbnailDirty = true;
+    renderPanelTabs();
+    renderGrannyGrid();
+    scheduleGrannySave();
+  }
+
   function renderGrannyAll(){
     grannyNameInput.value = granny.name || '';
     renderGrannyAbout();
+    renderPanelTabs();
     renderDesignPalette();
     renderGrannyGrid();
   }
@@ -3159,7 +3291,8 @@
       : 'No square designs yet — tap "+ New square design" to choose rounds and colours, then stamp it onto the grid below.';
     designPalette.appendChild(hint);
     const counts = {};
-    granny.layout.forEach(id => { if(id) counts[id] = (counts[id]||0) + 1; });
+    // "used" counts total across every panel, not just the one on screen — useful for yarn planning
+    granny.panels.forEach(pl => pl.layout.forEach(id => { if(id) counts[id] = (counts[id]||0) + 1; }));
 
     granny.designs.forEach(d => {
       const chip = document.createElement('div');
@@ -3220,7 +3353,9 @@
   // repaints only the blueprint cells that use a given design — used after editing a design's
   // rounds, so a change to one design doesn't force a redraw of the entire grid.
   function repaintCellsForDesign(designId){
-    granny.layout.forEach((id, idx) => { if(id === designId) updateGrannyCell(idx); });
+    // only the active panel has cells in the DOM right now — other panels re-render fresh from
+    // data whenever you switch to them, so there's nothing off-screen that needs patching
+    activePanel().layout.forEach((id, idx) => { if(id === designId) updateGrannyCell(idx); });
   }
 
   // ---------- square design modal ----------
@@ -3370,9 +3505,10 @@
     if(!editingDesignId || !granny) return;
     if(!confirm('Delete this square design? Any squares using it in your blueprint will become empty.')) return;
     const affectedIdx = [];
-    granny.layout.forEach((id, idx) => { if(id === editingDesignId) affectedIdx.push(idx); });
+    activePanel().layout.forEach((id, idx) => { if(id === editingDesignId) affectedIdx.push(idx); });
     granny.designs = granny.designs.filter(d => d.id !== editingDesignId);
-    granny.layout = granny.layout.map(id => id === editingDesignId ? null : id);
+    // clear it from every panel's data, not just the one on screen, so switching panels later doesn't surface a dangling reference
+    granny.panels.forEach(pl => { pl.layout = pl.layout.map(id => id === editingDesignId ? null : id); });
     if(granny.activeDesignId === editingDesignId) granny.activeDesignId = granny.designs[0] ? granny.designs[0].id : null;
     squareModal.style.display = 'none';
     renderDesignPalette();
@@ -3391,21 +3527,22 @@
   // updateGrannyCell() below, mirroring how the pixel chart reserves full re-renders for
   // structural changes and patches individual cells for marks/paints.
   function renderGrannyGrid(){
+    const panel = activePanel();
     grannyGrid.innerHTML = '';
     const cellPx = 56;
-    grannyGrid.style.gridTemplateColumns = `repeat(${granny.cols}, ${cellPx}px)`;
-    grannyCellElByIdx = new Array(granny.cols * granny.rows);
-    for(let row = 0; row < granny.rows; row++){
-      for(let col = 0; col < granny.cols; col++){
-        const idx = row * granny.cols + col;
+    grannyGrid.style.gridTemplateColumns = `repeat(${panel.cols}, ${cellPx}px)`;
+    grannyCellElByIdx = new Array(panel.cols * panel.rows);
+    for(let row = 0; row < panel.rows; row++){
+      for(let col = 0; col < panel.cols; col++){
+        const idx = row * panel.cols + col;
         const cell = document.createElement('div');
         cell.className = 'granny-cell granny-square';
         cell.style.width = cellPx + 'px';
         cell.style.height = cellPx + 'px';
-        const designId = granny.layout[idx];
+        const designId = panel.layout[idx];
         const design = designId ? granny.designs.find(d => d.id === designId) : null;
         buildGrannyPreview(cell, design ? design.rounds : null);
-        if(granny.completed[idx]) cell.classList.add('done');
+        if(panel.completed[idx]) cell.classList.add('done');
         cell.addEventListener('click', () => handleGrannyCellClick(idx));
         grannyCellElByIdx[idx] = cell;
         grannyGrid.appendChild(cell);
@@ -3414,35 +3551,38 @@
     renderGrannyProgress();
   }
 
-  // repaints one cell in place (its design preview + "done" state) without touching the rest of
-  // the grid — the common case, since almost every click only ever changes a single square.
+  // repaints one cell of the active panel in place (its design preview + "done" state) without
+  // touching the rest of the grid — the common case, since almost every click only ever changes
+  // a single square.
   function updateGrannyCell(idx){
     const cell = grannyCellElByIdx && grannyCellElByIdx[idx];
     if(!cell) return;
-    const designId = granny.layout[idx];
+    const panel = activePanel();
+    const designId = panel.layout[idx];
     const design = designId ? granny.designs.find(d => d.id === designId) : null;
     buildGrannyPreview(cell, design ? design.rounds : null);
-    cell.classList.toggle('done', !!granny.completed[idx]);
+    cell.classList.toggle('done', !!panel.completed[idx]);
   }
 
   function handleGrannyCellClick(idx){
+    const panel = activePanel();
     if(grannyMode === 'place'){
-      const oldDesignId = granny.layout[idx];
-      granny.layout[idx] = granny.activeDesignId;
-      granny.completed[idx] = 0; // placing/clearing a design resets that square's progress
+      const oldDesignId = panel.layout[idx];
+      panel.layout[idx] = granny.activeDesignId;
+      panel.completed[idx] = 0; // placing/clearing a design resets that square's progress
       updateGrannyCell(idx);
       updateDesignUsageCounts(oldDesignId, granny.activeDesignId); // patch just the two affected chip counts
       grannyThumbnailDirty = true;
     } else if(grannyMode === 'edit'){
-      const designId = granny.layout[idx];
+      const designId = panel.layout[idx];
       if(!designId){ showToast('Place a square design here first.', true); return; }
       openSquareModal(designId); // saving in the modal repaints affected cells and saves
       return;
     } else {
       // "mark made" only tracks progress — it never changes which design occupies a cell,
       // so the design palette and thumbnail (which don't reflect completion) stay untouched.
-      if(!granny.layout[idx]){ showToast('Place a square design here first.', true); return; }
-      granny.completed[idx] = granny.completed[idx] ? 0 : 1;
+      if(!panel.layout[idx]){ showToast('Place a square design here first.', true); return; }
+      panel.completed[idx] = panel.completed[idx] ? 0 : 1;
       updateGrannyCell(idx);
     }
     renderGrannyProgress();
@@ -3450,8 +3590,9 @@
   }
 
   function renderGrannyProgress(){
-    const total = granny.cols * granny.rows;
-    const done = granny.completed.reduce((s,v) => s + (v ? 1 : 0), 0);
+    const panel = activePanel();
+    const total = panel.cols * panel.rows;
+    const done = panel.completed.reduce((s,v) => s + (v ? 1 : 0), 0);
     const pct = total ? Math.round((done / total) * 100) : 0;
     grannyProgressFill.style.width = pct + '%';
     grannyProgressLabel.textContent = pct + '%';
@@ -3471,42 +3612,47 @@
   const GRANNY_RESIZE_LABEL = { grannyRowTopBtn:'Row at top', grannyRowBottomBtn:'Row at bottom', grannyColLeftBtn:'Column at left', grannyColRightBtn:'Column at right' };
   const GRANNY_MAX_DIM = 60;
 
+  // each resize op below acts on the active panel only — the other panels keep their own sizes
   function grannyAddRow(position){
-    if(granny.rows >= GRANNY_MAX_DIM){ showToast("That's plenty of squares already!", true); return; }
-    const w = granny.cols;
-    granny.layout = insertRowInto(granny.layout, w, position, null);
-    granny.completed = insertRowInto(granny.completed, w, position, 0);
-    granny.rows += 1;
+    const panel = activePanel();
+    if(panel.rows >= GRANNY_MAX_DIM){ showToast("That's plenty of squares already!", true); return; }
+    const w = panel.cols;
+    panel.layout = insertRowInto(panel.layout, w, position, null);
+    panel.completed = insertRowInto(panel.completed, w, position, 0);
+    panel.rows += 1;
     grannyThumbnailDirty = true;
     renderGrannyGrid();
     scheduleGrannySave();
   }
   function grannyAddCol(position){
-    if(granny.cols >= GRANNY_MAX_DIM){ showToast("That's plenty of squares already!", true); return; }
-    const w = granny.cols, h = granny.rows;
-    granny.layout = insertColInto(granny.layout, w, h, position, null);
-    granny.completed = insertColInto(granny.completed, w, h, position, 0);
-    granny.cols += 1;
+    const panel = activePanel();
+    if(panel.cols >= GRANNY_MAX_DIM){ showToast("That's plenty of squares already!", true); return; }
+    const w = panel.cols, h = panel.rows;
+    panel.layout = insertColInto(panel.layout, w, h, position, null);
+    panel.completed = insertColInto(panel.completed, w, h, position, 0);
+    panel.cols += 1;
     grannyThumbnailDirty = true;
     renderGrannyGrid();
     scheduleGrannySave();
   }
   function grannyRemoveRow(position){
-    if(granny.rows <= 1){ showToast("Can't remove — the blueprint needs at least one row of squares.", true); return; }
-    const w = granny.cols;
-    granny.layout = removeRowFrom(granny.layout, w, position, 1);
-    granny.completed = removeRowFrom(granny.completed, w, position, 1);
-    granny.rows -= 1;
+    const panel = activePanel();
+    if(panel.rows <= 1){ showToast("Can't remove — this panel needs at least one row of squares.", true); return; }
+    const w = panel.cols;
+    panel.layout = removeRowFrom(panel.layout, w, position, 1);
+    panel.completed = removeRowFrom(panel.completed, w, position, 1);
+    panel.rows -= 1;
     grannyThumbnailDirty = true;
     renderGrannyGrid();
     scheduleGrannySave();
   }
   function grannyRemoveCol(position){
-    if(granny.cols <= 1){ showToast("Can't remove — the blueprint needs at least one column of squares.", true); return; }
-    const w = granny.cols, h = granny.rows;
-    granny.layout = removeColFrom(granny.layout, w, h, position);
-    granny.completed = removeColFrom(granny.completed, w, h, position);
-    granny.cols -= 1;
+    const panel = activePanel();
+    if(panel.cols <= 1){ showToast("Can't remove — this panel needs at least one column of squares.", true); return; }
+    const w = panel.cols, h = panel.rows;
+    panel.layout = removeColFrom(panel.layout, w, h, position);
+    panel.completed = removeColFrom(panel.completed, w, h, position);
+    panel.cols -= 1;
     grannyThumbnailDirty = true;
     renderGrannyGrid();
     scheduleGrannySave();
@@ -3546,42 +3692,52 @@
   updateGrannyResizeUI();
 
   // ---------- thumbnail (home card + continue banner) ----------
-  // canvas equivalent of buildGrannyPreview()'s ring math (SVG isn't serializable to the data-URL
-  // thumbnail format the Home cards use, so this redraws the same gapped/rounded rounds by hand).
+  // Canvas equivalent of buildGrannyPreview()'s ring math — SVG isn't serializable to the
+  // data-URL format Home cards use, so this redraws the same gapped/rounded rounds by hand.
+  // Draws every panel side by side (e.g. "Front | Back") so the preview represents the whole
+  // project, not just whichever panel happened to be open when it was last saved.
   function makeGrannyThumbnail(){
-    if(!granny || !granny.cols || !granny.rows) return undefined;
-    const cellPx = 20;
-    const w = granny.cols * cellPx, h = granny.rows * cellPx;
+    if(!granny || !granny.panels || !granny.panels.length) return undefined;
+    const cellPx = 16, panelGap = 8;
+    const panels = granny.panels;
+    const totalW = panels.reduce((s,p) => s + p.cols * cellPx, 0) + panelGap * (panels.length - 1);
+    const totalH = Math.max(...panels.map(p => p.rows * cellPx));
     const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
+    canvas.width = Math.max(1, totalW); canvas.height = Math.max(1, totalH);
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(0, 0, w, h);
-    for(let row = 0; row < granny.rows; row++){
-      for(let col = 0; col < granny.cols; col++){
-        const idx = row * granny.cols + col;
-        const designId = granny.layout[idx];
-        const design = designId ? granny.designs.find(d => d.id === designId) : null;
-        const x0 = col * cellPx, y0 = row * cellPx;
-        if(!design || !design.rounds.length){
-          ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-          ctx.strokeRect(x0 + 1, y0 + 1, cellPx - 2, cellPx - 2);
-          continue;
-        }
-        const rounds = design.rounds, n = rounds.length;
-        const band = cellPx / 2 / n, gap = Math.min(0.6, band * 0.3);
-        for(let r = n - 1; r >= 0; r--){
-          const layer = n - 1 - r;
-          const inset = layer * band + layer * gap;
-          const size = Math.max(1, cellPx - 2 * inset);
-          const radius = Math.min(size * 0.22, 4);
-          ctx.fillStyle = rounds[r];
-          ctx.beginPath();
-          ctx.roundRect ? ctx.roundRect(x0 + inset, y0 + inset, size, size, radius) : ctx.rect(x0 + inset, y0 + inset, size, size);
-          ctx.fill();
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let xOffset = 0;
+    panels.forEach(panel => {
+      for(let row = 0; row < panel.rows; row++){
+        for(let col = 0; col < panel.cols; col++){
+          const idx = row * panel.cols + col;
+          const designId = panel.layout[idx];
+          const design = designId ? granny.designs.find(d => d.id === designId) : null;
+          const x0 = xOffset + col * cellPx, y0 = row * cellPx;
+          if(!design || !design.rounds.length){
+            ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+            ctx.strokeRect(x0 + 1, y0 + 1, cellPx - 2, cellPx - 2);
+            continue;
+          }
+          // same gapped/rounded-ring math as buildGrannyPreview(), by hand since canvas can't render the SVG directly
+          const rounds = design.rounds, n = rounds.length;
+          const band = cellPx / 2 / n, gap = Math.min(0.5, band * 0.3);
+          for(let r = n - 1; r >= 0; r--){
+            const layer = n - 1 - r;
+            const inset = layer * band + layer * gap;
+            const size = Math.max(1, cellPx - 2 * inset);
+            const radius = Math.min(size * 0.22, 3);
+            ctx.fillStyle = rounds[r];
+            ctx.beginPath();
+            ctx.roundRect ? ctx.roundRect(x0 + inset, y0 + inset, size, size, radius) : ctx.rect(x0 + inset, y0 + inset, size, size);
+            ctx.fill();
+          }
         }
       }
-    }
+      xOffset += panel.cols * cellPx + panelGap;
+    });
     return canvas.toDataURL('image/png');
   }
 
@@ -3607,10 +3763,9 @@
 
     const payload = {
       id: granny.id, name: granny.name, type: 'granny',
-      cols: granny.cols, rows: granny.rows,
       designs: granny.designs,
-      layout: granny.layout,
-      completed: granny.completed,
+      panels: granny.panels,
+      activePanelId: granny.activePanelId,
       thumbnail: granny.thumbnail,
       about: granny.about,
       updatedAt: Date.now()
@@ -3631,14 +3786,28 @@
     }
   }
 
+  function grannyPanelFromPayload(panel){
+    const cols = panel.cols || 1, rows = panel.rows || 1;
+    return {
+      id: panel.id || generateId(), name: panel.name || 'Panel',
+      cols, rows,
+      layout: (panel.layout && panel.layout.length === cols*rows) ? panel.layout : new Array(cols*rows).fill(null),
+      completed: (panel.completed && panel.completed.length === cols*rows) ? panel.completed : new Array(cols*rows).fill(0)
+    };
+  }
+
   function grannyStateFromPayload(p){
-    const cols = p.cols || 1, rows = p.rows || 1;
+    // pre-panels saves kept one grid at the top level (p.cols/rows/layout/completed) — fold that
+    // into a single "Panel 1" so older projects open exactly as they were, just now panel #1.
+    const panels = (Array.isArray(p.panels) && p.panels.length)
+      ? p.panels.map(grannyPanelFromPayload)
+      : [grannyPanelFromPayload({ id: generateId(), name: 'Panel 1', cols: p.cols, rows: p.rows, layout: p.layout, completed: p.completed })];
+    const activePanelId = panels.some(pl => pl.id === p.activePanelId) ? p.activePanelId : panels[0].id;
     return {
       id: p.id, name: p.name || 'Untitled blanket',
-      cols, rows,
       designs: p.designs || [],
-      layout: (p.layout && p.layout.length === cols*rows) ? p.layout : new Array(cols*rows).fill(null),
-      completed: (p.completed && p.completed.length === cols*rows) ? p.completed : new Array(cols*rows).fill(0),
+      panels,
+      activePanelId,
       activeDesignId: (p.designs && p.designs[0]) ? p.designs[0].id : null,
       thumbnail: p.thumbnail,
       about: p.about || { hookSize:'', yarnWeight:'', yarnBrand:'', notes:'' },
@@ -3661,7 +3830,7 @@
         const r = await storage.get(key, false);
         if(r && r.value){
           const p = JSON.parse(r.value);
-          results.push({ key, id: p.id, name: p.name, cols: p.cols, rows: p.rows, designs: p.designs, thumbnail: p.thumbnail, about: p.about, updatedAt: p.updatedAt });
+          results.push({ key, id: p.id, name: p.name, cols: p.cols, rows: p.rows, panels: p.panels, designs: p.designs, thumbnail: p.thumbnail, about: p.about, updatedAt: p.updatedAt });
         }
       } catch(e){ /* skip an entry that failed to read */ }
     }
@@ -3690,8 +3859,7 @@
     if(!granny) return;
     const payload = {
       id: granny.id, name: granny.name, type: 'granny',
-      cols: granny.cols, rows: granny.rows,
-      designs: granny.designs, layout: granny.layout, completed: granny.completed,
+      designs: granny.designs, panels: granny.panels, activePanelId: granny.activePanelId,
       thumbnail: granny.thumbnail, about: granny.about, exportedAt: Date.now()
     };
     const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
