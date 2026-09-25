@@ -3242,6 +3242,7 @@
     grannyThumbnailDirty = true;
     renderPanelTabs();
     renderGrannyGrid();
+    renderDesignPalette(); // every chip's "of N squares" denominator just grew
     scheduleGrannySave();
   }
 
@@ -3252,7 +3253,7 @@
     grannyThumbnailDirty = true;
     renderPanelTabs();
     renderGrannyGrid();
-    renderDesignPalette(); // the deleted panel's cells no longer count toward the shared used/made totals
+    renderDesignPalette(); // the deleted panel's cells no longer count toward the shared used total, and the total-squares denominator shrank
     scheduleGrannySave();
   }
 
@@ -3301,20 +3302,15 @@
       ? 'Tap ✎ on a design to edit its colours — or switch to 🎨 Edit colours mode below and tap a square in the blueprint.'
       : 'No square designs yet — tap "+ New square design" to choose rounds and colours, then stamp it onto the grid below.';
     designPalette.appendChild(hint);
-    const usedCounts = {}, madeCounts = {};
-    // both totals are across every panel, not just the one on screen — useful for yarn planning
-    granny.panels.forEach(pl => pl.layout.forEach((id, idx) => {
-      if(!id) return;
-      usedCounts[id] = (usedCounts[id]||0) + 1;
-      if(pl.completed[idx]) madeCounts[id] = (madeCounts[id]||0) + 1;
-    }));
+    const usedCounts = {};
+    // totals across every panel, not just the one on screen — useful for yarn planning
+    granny.panels.forEach(pl => pl.layout.forEach(id => { if(id) usedCounts[id] = (usedCounts[id]||0) + 1; }));
 
     granny.designs.forEach(d => {
       const chip = document.createElement('div');
       chip.className = 'design-chip' + (granny.activeDesignId === d.id ? ' active' : '');
       chip.dataset.designId = d.id; // lets bumpDesignChip() find this chip without a full rebuild
       chip.dataset.used = usedCounts[d.id] || 0;
-      chip.dataset.made = madeCounts[d.id] || 0;
       const sq = document.createElement('div');
       sq.className = 'granny-square';
       sq.style.width = '48px'; sq.style.height = '48px';
@@ -3358,32 +3354,34 @@
 
   // writes a chip's "N used" / "M of N made" text from its dataset counts — dataset stays the
   // source of truth so repeated bumps never drift out of sync with re-parsed display text.
+  // both numbers below are driven by how many cells actually use this design (not by Mark Made
+  // completion) — one against the blueprint's total square count, the other against the design's
+  // own manually-set target, if it has one.
   function refreshChipCountEls(chip, design){
     const used = parseInt(chip.dataset.used, 10) || 0;
-    const made = parseInt(chip.dataset.made, 10) || 0;
+    const total = grannyTotalSquares(granny);
     const ct = chip.querySelector('.chipcount');
-    if(ct) ct.textContent = used + ' used';
+    if(ct) ct.textContent = `${used}/${total} squares`;
     const nd = chip.querySelector('.chipneeded');
     if(nd){
       if(design && design.needed){
         nd.style.display = '';
-        nd.textContent = `${made}/${design.needed} made`;
-        nd.title = `${made} of ${design.needed} needed marked as made`;
-        nd.classList.toggle('complete', made >= design.needed);
+        nd.textContent = `${used}/${design.needed} needed`;
+        nd.title = `${used} placed in the blueprint toward a need of ${design.needed}`;
+        nd.classList.toggle('complete', used >= design.needed);
       } else {
         nd.style.display = 'none';
       }
     }
   }
 
-  // adjusts one chip's used/made counts directly instead of recomputing counts for every design
-  // and rebuilding the whole palette — called on every single grid click, so it stays cheap.
-  function bumpDesignChip(designId, usedDelta, madeDelta){
-    if(!designId) return;
+  // adjusts one chip's used count directly instead of recomputing counts for every design and
+  // rebuilding the whole palette — called on every single grid click, so it stays cheap.
+  function bumpDesignChip(designId, usedDelta){
+    if(!designId || !usedDelta) return;
     const chip = designPalette.querySelector(`.design-chip[data-design-id="${designId}"]`);
     if(!chip) return; // design may since have been deleted
     chip.dataset.used = Math.max(0, (parseInt(chip.dataset.used, 10) || 0) + usedDelta);
-    chip.dataset.made = Math.max(0, (parseInt(chip.dataset.made, 10) || 0) + madeDelta);
     refreshChipCountEls(chip, granny.designs.find(d => d.id === designId));
   }
 
@@ -3611,15 +3609,12 @@
     if(grannyMode === 'place'){
       const oldDesignId = panel.layout[idx];
       const newDesignId = granny.activeDesignId;
-      const wasCompleted = !!panel.completed[idx];
       panel.layout[idx] = newDesignId;
       panel.completed[idx] = 0; // placing/clearing a design resets that square's progress
       updateGrannyCell(idx);
       if(oldDesignId !== newDesignId){
-        bumpDesignChip(oldDesignId, -1, wasCompleted ? -1 : 0); // losing this cell, and its "made" mark if it had one
-        bumpDesignChip(newDesignId, 1, 0); // gaining the cell, always unmade since completed just reset to 0
-      } else if(wasCompleted){
-        bumpDesignChip(oldDesignId, 0, -1); // re-stamping the same design still clears its "made" mark
+        bumpDesignChip(oldDesignId, -1);
+        bumpDesignChip(newDesignId, 1);
       }
       grannyThumbnailDirty = true;
     } else if(grannyMode === 'edit'){
@@ -3628,13 +3623,12 @@
       openSquareModal(designId); // saving in the modal repaints affected cells and saves
       return;
     } else {
-      // "mark made" never changes which design occupies a cell (so "used" and the thumbnail are
-      // untouched), but it does move that design's "made" count toward its target, if it has one.
+      // "mark made" tracks this panel's own progress bar — it never changes which design occupies
+      // a cell, so the design palette's used/needed counts (which count placement, not completion)
+      // and the thumbnail stay untouched.
       if(!panel.layout[idx]){ showToast('Place a square design here first.', true); return; }
-      const nowCompleted = panel.completed[idx] ? 0 : 1;
-      panel.completed[idx] = nowCompleted;
+      panel.completed[idx] = panel.completed[idx] ? 0 : 1;
       updateGrannyCell(idx);
-      bumpDesignChip(panel.layout[idx], 0, nowCompleted ? 1 : -1);
     }
     renderGrannyProgress();
     scheduleGrannySave();
@@ -3673,6 +3667,7 @@
     panel.rows += 1;
     grannyThumbnailDirty = true;
     renderGrannyGrid();
+    renderDesignPalette(); // every chip's "of N squares" denominator just grew
     scheduleGrannySave();
   }
   function grannyAddCol(position){
@@ -3684,6 +3679,7 @@
     panel.cols += 1;
     grannyThumbnailDirty = true;
     renderGrannyGrid();
+    renderDesignPalette(); // every chip's "of N squares" denominator just grew
     scheduleGrannySave();
   }
   function grannyRemoveRow(position){
@@ -3695,7 +3691,7 @@
     panel.rows -= 1;
     grannyThumbnailDirty = true;
     renderGrannyGrid();
-    renderDesignPalette(); // the removed row may have carried cells counted toward a design's used/made totals
+    renderDesignPalette(); // the removed row may have carried counted cells, and the total-squares denominator shrank
     scheduleGrannySave();
   }
   function grannyRemoveCol(position){
@@ -3707,7 +3703,7 @@
     panel.cols -= 1;
     grannyThumbnailDirty = true;
     renderGrannyGrid();
-    renderDesignPalette(); // the removed column may have carried cells counted toward a design's used/made totals
+    renderDesignPalette(); // the removed column may have carried counted cells, and the total-squares denominator shrank
     scheduleGrannySave();
   }
 
