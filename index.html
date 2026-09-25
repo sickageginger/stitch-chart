@@ -557,6 +557,18 @@
   .type-tab:hover{border-color:var(--thread);color:var(--thread);}
   .type-tab.active{background:var(--thread);border-color:var(--thread);color:#fff;}
 
+  .type-chooser{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:22px;}
+  .chooser-tile{
+    flex:1;min-width:220px;background:var(--panel);border:1px solid var(--line);border-radius:18px;
+    padding:28px 24px;text-align:left;cursor:pointer;font-family:'Quicksand',sans-serif;color:var(--ink);
+    transition:transform .15s, box-shadow .15s, border-color .15s;
+  }
+  .chooser-tile:hover{transform:translateY(-3px);border-color:var(--thread);box-shadow:0 10px 26px rgba(232,135,158,0.22);}
+  .chooser-icon{font-size:2.2rem;margin-bottom:10px;}
+  .chooser-title{font-family:'Fraunces',serif;font-weight:600;font-size:1.15rem;margin-bottom:4px;}
+  .chooser-sub{color:var(--ink-soft);font-size:0.86rem;margin-bottom:10px;line-height:1.4;}
+  .chooser-count{font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--thread);}
+
   /* ---- Granny square planner ---- */
   #grannySetupView{display:none;}
   #grannySetupView.active{display:block;}
@@ -639,10 +651,10 @@
 
   <div id="homeView">
     <div class="home-head">
-      <h2>Your charts</h2>
+      <h2 id="homeHeadTitle">Your charts</h2>
     </div>
     <div class="type-tabs" id="typeTabs">
-      <button type="button" class="type-tab active" id="pixelTab">🧶 Pixel grids</button>
+      <button type="button" class="type-tab" id="pixelTab">🧶 Pixel grids</button>
       <button type="button" class="type-tab" id="grannyTab">🌼 Granny squares</button>
     </div>
     <button type="button" class="continue-banner" id="continueBanner" style="display:none;">
@@ -659,6 +671,20 @@
         <div class="fun-joke" id="funJokeText"></div>
         <button type="button" class="fun-shuffle-btn" id="funShuffleBtn" title="Another one!">🔀</button>
       </div>
+    </div>
+    <div class="type-chooser" id="typeChooser" style="display:none;">
+      <button type="button" class="chooser-tile" id="chooserPixelTile">
+        <div class="chooser-icon">🧶</div>
+        <div class="chooser-title">Pixel grid charts</div>
+        <div class="chooser-sub">Turn a photo into a stitch-by-stitch crochet chart.</div>
+        <div class="chooser-count" id="chooserPixelCount"></div>
+      </button>
+      <button type="button" class="chooser-tile" id="chooserGrannyTile">
+        <div class="chooser-icon">🌼</div>
+        <div class="chooser-title">Granny square blankets</div>
+        <div class="chooser-sub">Design squares round by round, then blueprint how they join.</div>
+        <div class="chooser-count" id="chooserGrannyCount"></div>
+      </button>
     </div>
     <div class="folder-bar" id="folderBar"></div>
     <div class="home-grid" id="homeGrid"></div>
@@ -1018,7 +1044,7 @@
   // ---------- granny square planner state ----------
   let granny = null;               // { id, name, cols, rows, designs:[{id,name,rounds:[hex,...]}], layout:[designId|null,...], completed:[0/1,...], activeDesignId, thumbnail, about, updatedAt }
   let currentMode = 'pixel';       // 'pixel' | 'granny' — which project type the "+ New" button and Home tab currently point at
-  let activeType = 'pixel';        // which Home tab is showing
+  let activeType = null;           // null = showing the type-chooser; 'pixel' | 'granny' once a type's gallery is open
   let grannyMode = 'place';        // 'place' | 'edit' | 'mark' — blueprint grid click behavior
   let grannyResizeMode = 'add';
   let editingDesignId = null;      // id being edited in the square modal, or null when creating a new one
@@ -1074,6 +1100,9 @@
 
   // ---------- granny square elements ----------
   const typeTabs = el('typeTabs'), pixelTab = el('pixelTab'), grannyTab = el('grannyTab');
+  const homeHeadTitle = el('homeHeadTitle');
+  const typeChooser = el('typeChooser'), chooserPixelTile = el('chooserPixelTile'), chooserGrannyTile = el('chooserGrannyTile');
+  const chooserPixelCount = el('chooserPixelCount'), chooserGrannyCount = el('chooserGrannyCount');
   const grannySetupView = el('grannySetupView'), grannyView = el('grannyView');
   const grannyColsInput = el('grannyColsInput'), grannyRowsInput = el('grannyRowsInput'), grannyCreateBtn = el('grannyCreateBtn');
   const grannyNameInput = el('grannyNameInput'), grannySaveNowBtn = el('grannySaveNowBtn'), grannyExportBtn = el('grannyExportBtn');
@@ -2371,14 +2400,18 @@
   }
 
   async function showHome(){
-    currentMode = activeType;
     setupView.classList.add('hidden');
     chartView.classList.remove('active');
     grannySetupView.classList.remove('active');
     grannyView.classList.remove('active');
     homeView.classList.add('active');
-    newProjectBtn.style.display = 'inline-block';
-    syncNewProjectBtnLabel();
+    if(activeType){
+      currentMode = activeType;
+      newProjectBtn.style.display = 'inline-block';
+      syncNewProjectBtnLabel();
+    } else {
+      newProjectBtn.style.display = 'none';
+    }
     await renderHomeGrid();
   }
 
@@ -2421,8 +2454,8 @@
     if(currentMode === 'granny') resetToNewGranny();
     else resetToNewChart();
   });
-  homeBtn.addEventListener('click', showHome);
-  logoHomeBtn.addEventListener('click', showHome);
+  homeBtn.addEventListener('click', () => { activeType = null; showHome(); });
+  logoHomeBtn.addEventListener('click', () => { activeType = null; showHome(); });
 
   // ---------- storage adapter ----------
   // window.storage is an Artifacts-only API — it doesn't exist when this file is
@@ -2879,6 +2912,8 @@
   }
   pixelTab.addEventListener('click', () => { activeType = 'pixel'; renderHomeGrid(); });
   grannyTab.addEventListener('click', () => { activeType = 'granny'; renderHomeGrid(); });
+  chooserPixelTile.addEventListener('click', () => { activeType = 'pixel'; renderHomeGrid(); });
+  chooserGrannyTile.addEventListener('click', () => { activeType = 'granny'; renderHomeGrid(); });
 
   async function renderHomeGrid(){
     homeGrid.innerHTML = '<div class="home-empty">Loading your projects…</div>';
@@ -2888,9 +2923,26 @@
     lastChartsList = pixelList;
     lastFoldersList = folders;
     lastGrannyList = grannyList;
-    renderTypeTabs();
     renderFunBanner();
     renderContinueBanner(pixelList, grannyList);
+
+    if(!activeType){
+      // no type picked yet — show the chooser instead of a gallery
+      homeHeadTitle.textContent = 'What are you making?';
+      typeTabs.style.display = 'none';
+      folderBar.style.display = 'none';
+      homeGrid.style.display = 'none';
+      typeChooser.style.display = 'flex';
+      chooserPixelCount.textContent = pixelList.length ? `${pixelList.length} chart${pixelList.length===1?'':'s'} saved` : 'No charts yet';
+      chooserGrannyCount.textContent = grannyList.length ? `${grannyList.length} blueprint${grannyList.length===1?'':'s'} saved` : 'No blueprints yet';
+      return;
+    }
+
+    typeChooser.style.display = 'none';
+    typeTabs.style.display = 'flex';
+    homeGrid.style.display = 'grid';
+    homeHeadTitle.textContent = activeType === 'granny' ? 'Your granny square blueprints' : 'Your pixel grid charts';
+    renderTypeTabs();
     if(activeType === 'pixel') renderFolderBar(folders, pixelList);
     homeGrid.innerHTML = '';
 
