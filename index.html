@@ -1071,6 +1071,8 @@
   let grannyRetrySaveTimer = null;
   let grannySaveStatusFadeTimer = null;
   let lastGrannyList = [];
+  let grannyCellElByIdx = null;     // flat array, cellIdx -> its blueprint-grid <div> — lets a single click patch just that cell instead of rebuilding the whole grid
+  let grannyThumbnailDirty = true;  // only design/layout changes need a new thumbnail canvas — an about/name edit shouldn't redraw it on every autosave
   const DEFAULT_GRANNY_ROUNDS = ['#E8879E', '#F4B860', '#FFFFFF'];
   const GRANNY_ADD_PALETTE = ['#E8879E', '#F4B860', '#8FBF8A', '#D46A85', '#F3E9E6', '#5A4A47'];
   // a spread of common yarn shades offered as one-tap presets in the round editor
@@ -1596,6 +1598,7 @@
           granny = grannyStateFromPayload(p);
           granny.id = generateId(); // always import as a new project, never overwrite an existing save
           granny.name = (granny.name || 'Untitled blanket') + ' (imported)';
+          grannyThumbnailDirty = false; // the imported thumbnail already matches this data
           showGrannyEditor();
           saveGrannyState();
           showToast('Blueprint imported.');
@@ -3106,6 +3109,7 @@
       about: { hookSize:'', yarnWeight:'', yarnBrand:'', notes:'' },
       updatedAt: Date.now()
     };
+    grannyThumbnailDirty = true;
     showGrannyEditor();
     saveGrannyState();
   });
@@ -3160,6 +3164,7 @@
     granny.designs.forEach(d => {
       const chip = document.createElement('div');
       chip.className = 'design-chip' + (granny.activeDesignId === d.id ? ' active' : '');
+      chip.dataset.designId = d.id; // lets updateDesignUsageCounts() find this chip's count without a full rebuild
       const sq = document.createElement('div');
       sq.className = 'granny-square';
       sq.style.width = '48px'; sq.style.height = '48px';
@@ -3197,6 +3202,26 @@
     designPalette.appendChild(newChip);
   }
   grannyNewDesignBtn.addEventListener('click', () => openSquareModal(null));
+
+  // adjusts two chips' "N used" counts directly instead of recomputing counts for every design
+  // and rebuilding the whole palette — called on every single grid click, so it stays cheap.
+  function updateDesignUsageCounts(oldDesignId, newDesignId){
+    if(oldDesignId === newDesignId) return;
+    const bump = (designId, delta) => {
+      if(!designId) return;
+      const chip = designPalette.querySelector(`.design-chip[data-design-id="${designId}"] .chipcount`);
+      if(!chip) return; // design may since have been deleted
+      chip.textContent = Math.max(0, (parseInt(chip.textContent, 10) || 0) + delta) + ' used';
+    };
+    bump(oldDesignId, -1);
+    bump(newDesignId, 1);
+  }
+
+  // repaints only the blueprint cells that use a given design — used after editing a design's
+  // rounds, so a change to one design doesn't force a redraw of the entire grid.
+  function repaintCellsForDesign(designId){
+    granny.layout.forEach((id, idx) => { if(id === designId) updateGrannyCell(idx); });
+  }
 
   // ---------- square design modal ----------
   function openSquareModal(designId){
@@ -3324,6 +3349,7 @@
   saveSquareDesignBtn.addEventListener('click', () => {
     if(!granny) return;
     const name = squareNameInput.value.trim() || ('Design ' + (granny.designs.length + 1));
+    const editedId = editingDesignId; // a new design isn't stamped anywhere yet, so no cells need repainting for it
     if(editingDesignId){
       const d = granny.designs.find(x => x.id === editingDesignId);
       d.name = name;
@@ -3334,20 +3360,24 @@
       granny.activeDesignId = d.id;
     }
     squareModal.style.display = 'none';
-    renderDesignPalette();
-    renderGrannyGrid();
+    renderDesignPalette(); // the design list itself changed — worth a full rebuild, it's small
+    if(editedId) repaintCellsForDesign(editedId); // only the cells using this design need a new preview
+    grannyThumbnailDirty = true;
     scheduleGrannySave();
   });
 
   deleteSquareDesignBtn.addEventListener('click', () => {
     if(!editingDesignId || !granny) return;
     if(!confirm('Delete this square design? Any squares using it in your blueprint will become empty.')) return;
+    const affectedIdx = [];
+    granny.layout.forEach((id, idx) => { if(id === editingDesignId) affectedIdx.push(idx); });
     granny.designs = granny.designs.filter(d => d.id !== editingDesignId);
     granny.layout = granny.layout.map(id => id === editingDesignId ? null : id);
     if(granny.activeDesignId === editingDesignId) granny.activeDesignId = granny.designs[0] ? granny.designs[0].id : null;
     squareModal.style.display = 'none';
     renderDesignPalette();
-    renderGrannyGrid();
+    affectedIdx.forEach(updateGrannyCell); // only the cells that used the deleted design need to go blank
+    grannyThumbnailDirty = true;
     scheduleGrannySave();
   });
 
@@ -3356,10 +3386,15 @@
   squareModal.addEventListener('click', e => { if(e.target === squareModal) closeSquareModal(); });
 
   // ---------- blueprint grid ----------
+  // Full rebuild — used for structural changes (a fresh project, a resize, or loading a save)
+  // where every cell's index shifts anyway. Everyday clicks patch a single cell instead; see
+  // updateGrannyCell() below, mirroring how the pixel chart reserves full re-renders for
+  // structural changes and patches individual cells for marks/paints.
   function renderGrannyGrid(){
     grannyGrid.innerHTML = '';
     const cellPx = 56;
     grannyGrid.style.gridTemplateColumns = `repeat(${granny.cols}, ${cellPx}px)`;
+    grannyCellElByIdx = new Array(granny.cols * granny.rows);
     for(let row = 0; row < granny.rows; row++){
       for(let col = 0; col < granny.cols; col++){
         const idx = row * granny.cols + col;
@@ -3372,27 +3407,45 @@
         buildGrannyPreview(cell, design ? design.rounds : null);
         if(granny.completed[idx]) cell.classList.add('done');
         cell.addEventListener('click', () => handleGrannyCellClick(idx));
+        grannyCellElByIdx[idx] = cell;
         grannyGrid.appendChild(cell);
       }
     }
     renderGrannyProgress();
   }
 
+  // repaints one cell in place (its design preview + "done" state) without touching the rest of
+  // the grid — the common case, since almost every click only ever changes a single square.
+  function updateGrannyCell(idx){
+    const cell = grannyCellElByIdx && grannyCellElByIdx[idx];
+    if(!cell) return;
+    const designId = granny.layout[idx];
+    const design = designId ? granny.designs.find(d => d.id === designId) : null;
+    buildGrannyPreview(cell, design ? design.rounds : null);
+    cell.classList.toggle('done', !!granny.completed[idx]);
+  }
+
   function handleGrannyCellClick(idx){
     if(grannyMode === 'place'){
+      const oldDesignId = granny.layout[idx];
       granny.layout[idx] = granny.activeDesignId;
       granny.completed[idx] = 0; // placing/clearing a design resets that square's progress
+      updateGrannyCell(idx);
+      updateDesignUsageCounts(oldDesignId, granny.activeDesignId); // patch just the two affected chip counts
+      grannyThumbnailDirty = true;
     } else if(grannyMode === 'edit'){
       const designId = granny.layout[idx];
       if(!designId){ showToast('Place a square design here first.', true); return; }
-      openSquareModal(designId); // saving in the modal re-renders the grid and saves
+      openSquareModal(designId); // saving in the modal repaints affected cells and saves
       return;
     } else {
+      // "mark made" only tracks progress — it never changes which design occupies a cell,
+      // so the design palette and thumbnail (which don't reflect completion) stay untouched.
       if(!granny.layout[idx]){ showToast('Place a square design here first.', true); return; }
       granny.completed[idx] = granny.completed[idx] ? 0 : 1;
+      updateGrannyCell(idx);
     }
-    renderGrannyGrid();
-    renderDesignPalette(); // usage counts may have changed
+    renderGrannyProgress();
     scheduleGrannySave();
   }
 
@@ -3424,6 +3477,7 @@
     granny.layout = insertRowInto(granny.layout, w, position, null);
     granny.completed = insertRowInto(granny.completed, w, position, 0);
     granny.rows += 1;
+    grannyThumbnailDirty = true;
     renderGrannyGrid();
     scheduleGrannySave();
   }
@@ -3433,6 +3487,7 @@
     granny.layout = insertColInto(granny.layout, w, h, position, null);
     granny.completed = insertColInto(granny.completed, w, h, position, 0);
     granny.cols += 1;
+    grannyThumbnailDirty = true;
     renderGrannyGrid();
     scheduleGrannySave();
   }
@@ -3442,6 +3497,7 @@
     granny.layout = removeRowFrom(granny.layout, w, position, 1);
     granny.completed = removeRowFrom(granny.completed, w, position, 1);
     granny.rows -= 1;
+    grannyThumbnailDirty = true;
     renderGrannyGrid();
     scheduleGrannySave();
   }
@@ -3451,6 +3507,7 @@
     granny.layout = removeColFrom(granny.layout, w, h, position);
     granny.completed = removeColFrom(granny.completed, w, h, position);
     granny.cols -= 1;
+    grannyThumbnailDirty = true;
     renderGrannyGrid();
     scheduleGrannySave();
   }
@@ -3489,6 +3546,8 @@
   updateGrannyResizeUI();
 
   // ---------- thumbnail (home card + continue banner) ----------
+  // canvas equivalent of buildGrannyPreview()'s ring math (SVG isn't serializable to the data-URL
+  // thumbnail format the Home cards use, so this redraws the same gapped/rounded rounds by hand).
   function makeGrannyThumbnail(){
     if(!granny || !granny.cols || !granny.rows) return undefined;
     const cellPx = 20;
@@ -3539,7 +3598,12 @@
     clearTimeout(grannyRetrySaveTimer);
     grannySaveStatus.textContent = 'Saving…';
     grannySaveStatus.classList.remove('error');
-    granny.thumbnail = makeGrannyThumbnail();
+    // re-drawing the thumbnail canvas is wasted work when only the name/about text changed —
+    // this fires on every autosave, including one per keystroke in the Notes field.
+    if(grannyThumbnailDirty){
+      granny.thumbnail = makeGrannyThumbnail();
+      grannyThumbnailDirty = false;
+    }
 
     const payload = {
       id: granny.id, name: granny.name, type: 'granny',
@@ -3609,6 +3673,7 @@
       const res = await storage.get('granny:' + id, false);
       if(!res || !res.value) return false;
       granny = grannyStateFromPayload(JSON.parse(res.value));
+      grannyThumbnailDirty = false; // the loaded thumbnail already matches this data
       showGrannyEditor();
       return true;
     } catch(e){
