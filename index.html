@@ -631,6 +631,12 @@
   .round-row .chip{width:28px;height:28px;border-radius:8px;border:1px solid rgba(0,0,0,0.18);display:block;transition:transform .15s;}
   .round-row .chip-wrap:hover .chip{transform:scale(1.08);}
   .round-row .chip-input{width:28px;height:28px;}
+  .hex-input{
+    width:80px;padding:5px 7px;border:1px solid var(--line);border-radius:8px;
+    background:var(--surface);color:var(--ink);font-size:0.78rem;text-transform:uppercase;flex-shrink:0;
+  }
+  .hex-input:focus{outline:2px solid var(--thread);outline-offset:1px;border-color:var(--thread);}
+  .hex-input.invalid{border-color:var(--bad);color:var(--bad);}
   .round-row .round-remove{
     margin-left:auto;background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:0.95rem;padding:4px;
   }
@@ -3218,6 +3224,10 @@
     editingRounds[i] = hex.toUpperCase();
     const chip = row.querySelector('.chip-wrap .chip');
     if(chip) chip.style.background = editingRounds[i];
+    const colorInput = row.querySelector('.chip-input');
+    if(colorInput) colorInput.value = editingRounds[i];
+    const hexInput = row.querySelector('.hex-input');
+    if(hexInput){ hexInput.value = editingRounds[i]; hexInput.classList.remove('invalid'); }
     row.querySelectorAll('.preset-swatch').forEach(btn => {
       btn.classList.toggle('selected', btn.dataset.hex === editingRounds[i]);
     });
@@ -3269,6 +3279,24 @@
       chipWrap.appendChild(chip);
       chipWrap.appendChild(colorInput);
       row.appendChild(chipWrap);
+
+      const hexInput = document.createElement('input');
+      hexInput.type = 'text';
+      hexInput.className = 'hex-input mono';
+      hexInput.value = upperHex;
+      hexInput.maxLength = 7;
+      hexInput.spellcheck = false;
+      hexInput.placeholder = '#RRGGBB';
+      hexInput.addEventListener('input', () => {
+        const m = /^#?([0-9A-Fa-f]{6})$/.exec(hexInput.value.trim());
+        if(m) applyRoundColor(i, '#' + m[1], row);
+        else hexInput.classList.add('invalid');
+      });
+      hexInput.addEventListener('blur', () => {
+        hexInput.value = editingRounds[i]; // snap back if left incomplete/invalid
+        hexInput.classList.remove('invalid');
+      });
+      row.appendChild(hexInput);
 
       if(editingRounds.length > 1){
         const rm = document.createElement('button');
