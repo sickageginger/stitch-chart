@@ -585,11 +585,11 @@
   .design-chip .chipname{font-size:0.72rem;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px;}
   .design-chip .chipcount{font-size:0.68rem;color:var(--ink-soft);}
   .design-chip .chip-edit-btn{
-    position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;border:none;
+    position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;border:1px solid var(--line);
     background:var(--panel);color:var(--ink-soft);font-size:0.65rem;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s;
+    display:flex;align-items:center;justify-content:center;opacity:0.85;transition:opacity .15s, transform .15s;
   }
-  .design-chip:hover .chip-edit-btn{opacity:1;}
+  .design-chip:hover .chip-edit-btn{opacity:1;transform:scale(1.1);}
   .design-chip-new{border:1px dashed var(--line);color:var(--ink-soft);justify-content:center;min-height:64px;}
   .design-chip-new:hover{border-color:var(--thread);color:var(--thread);}
 
@@ -956,6 +956,7 @@
     <div class="toolbar">
       <div class="resize-mode-toggle" id="grannyModeToggle">
         <button type="button" class="mode-btn active" id="grannyModePlaceBtn" data-mode="place">🧩 Place squares</button>
+        <button type="button" class="mode-btn" id="grannyModeEditBtn" data-mode="edit">🎨 Edit colours</button>
         <button type="button" class="mode-btn" id="grannyModeMarkBtn" data-mode="mark">✓ Mark made</button>
       </div>
       <button type="button" class="newproj-btn" id="grannyNewDesignBtn">+ New square design</button>
@@ -1018,7 +1019,7 @@
   let granny = null;               // { id, name, cols, rows, designs:[{id,name,rounds:[hex,...]}], layout:[designId|null,...], completed:[0/1,...], activeDesignId, thumbnail, about, updatedAt }
   let currentMode = 'pixel';       // 'pixel' | 'granny' — which project type the "+ New" button and Home tab currently point at
   let activeType = 'pixel';        // which Home tab is showing
-  let grannyMode = 'place';        // 'place' | 'mark' — blueprint grid click behavior
+  let grannyMode = 'place';        // 'place' | 'edit' | 'mark' — blueprint grid click behavior
   let grannyResizeMode = 'add';
   let editingDesignId = null;      // id being edited in the square modal, or null when creating a new one
   let editingRounds = null;        // working copy of round colors while the square modal is open
@@ -1079,7 +1080,7 @@
   const grannyAboutToggleBtn = el('grannyAboutToggleBtn'), grannyAboutPanel = el('grannyAboutPanel'), grannySaveStatus = el('grannySaveStatus');
   const grannyProgressFill = el('grannyProgressFill'), grannyProgressLabel = el('grannyProgressLabel');
   const grannyHookSizeInput = el('grannyHookSizeInput'), grannyYarnWeightInput = el('grannyYarnWeightInput'), grannyYarnBrandInput = el('grannyYarnBrandInput'), grannyNotesInput = el('grannyNotesInput');
-  const grannyModePlaceBtn = el('grannyModePlaceBtn'), grannyModeMarkBtn = el('grannyModeMarkBtn'), grannyNewDesignBtn = el('grannyNewDesignBtn');
+  const grannyModePlaceBtn = el('grannyModePlaceBtn'), grannyModeEditBtn = el('grannyModeEditBtn'), grannyModeMarkBtn = el('grannyModeMarkBtn'), grannyNewDesignBtn = el('grannyNewDesignBtn');
   const designPalette = el('designPalette'), grannyGrid = el('grannyGrid');
   const grannyResizeAddBtn = el('grannyResizeAddBtn'), grannyResizeRemoveBtn = el('grannyResizeRemoveBtn'), grannyResizeButtonsGroup = el('grannyResizeButtonsGroup');
   const grannyRowTopBtn = el('grannyRowTopBtn'), grannyRowBottomBtn = el('grannyRowBottomBtn'), grannyColLeftBtn = el('grannyColLeftBtn'), grannyColRightBtn = el('grannyColRightBtn');
@@ -3040,12 +3041,12 @@
   // ---------- design library (stamp palette) ----------
   function renderDesignPalette(){
     designPalette.innerHTML = '';
-    if(!granny.designs.length){
-      const hint = document.createElement('div');
-      hint.className = 'hint';
-      hint.textContent = 'No square designs yet — tap "+ New square design" to choose rounds and colors, then stamp it onto the grid below.';
-      designPalette.appendChild(hint);
-    }
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = granny.designs.length
+      ? 'Tap ✎ on a design to edit its colours — or switch to 🎨 Edit colours mode below and tap a square in the blueprint.'
+      : 'No square designs yet — tap "+ New square design" to choose rounds and colours, then stamp it onto the grid below.';
+    designPalette.appendChild(hint);
     const counts = {};
     granny.layout.forEach(id => { if(id) counts[id] = (counts[id]||0) + 1; });
 
@@ -3207,6 +3208,11 @@
     if(grannyMode === 'place'){
       granny.layout[idx] = granny.activeDesignId;
       granny.completed[idx] = 0; // placing/clearing a design resets that square's progress
+    } else if(grannyMode === 'edit'){
+      const designId = granny.layout[idx];
+      if(!designId){ showToast('Place a square design here first.', true); return; }
+      openSquareModal(designId); // saving in the modal re-renders the grid and saves
+      return;
     } else {
       if(!granny.layout[idx]){ showToast('Place a square design here first.', true); return; }
       granny.completed[idx] = granny.completed[idx] ? 0 : 1;
@@ -3227,9 +3233,11 @@
   function setGrannyMode(m){
     grannyMode = m;
     grannyModePlaceBtn.classList.toggle('active', m === 'place');
+    grannyModeEditBtn.classList.toggle('active', m === 'edit');
     grannyModeMarkBtn.classList.toggle('active', m === 'mark');
   }
   grannyModePlaceBtn.addEventListener('click', () => setGrannyMode('place'));
+  grannyModeEditBtn.addEventListener('click', () => setGrannyMode('edit'));
   grannyModeMarkBtn.addEventListener('click', () => setGrannyMode('mark'));
 
   // ---------- resize the blueprint (reuses the same generic insert/remove helpers as the pixel chart) ----------
