@@ -607,13 +607,15 @@
   .design-palette .hint{font-size:0.78rem;color:var(--ink-soft);width:100%;margin-bottom:2px;}
   .design-chip{
     display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px;border-radius:12px;
-    border:2px solid transparent;cursor:pointer;background:var(--surface);width:80px;position:relative;
+    border:2px solid transparent;cursor:pointer;background:var(--surface);width:88px;position:relative;
     font-family:'Quicksand',sans-serif;
   }
   .design-chip:hover{border-color:var(--line);}
   .design-chip.active{border-color:var(--thread);}
-  .design-chip .chipname{font-size:0.72rem;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70px;}
+  .design-chip .chipname{font-size:0.72rem;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:78px;}
   .design-chip .chipcount{font-size:0.68rem;color:var(--ink-soft);}
+  .design-chip .chipneeded{font-size:0.68rem;color:var(--thread);font-weight:600;}
+  .design-chip .chipneeded.complete{color:var(--good);}
   .design-chip .chip-edit-btn{
     position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;border:1px solid var(--line);
     background:var(--panel);color:var(--ink-soft);font-size:0.65rem;cursor:pointer;
@@ -856,8 +858,16 @@
         <button type="button" class="modal-close" id="squareModalCloseBtn" aria-label="Close">×</button>
       </div>
       <div class="field">
-        <label for="squareNameInput">Design name</label>
-        <input type="text" id="squareNameInput" placeholder="e.g. Sunset colorway">
+        <div class="row">
+          <div>
+            <label for="squareNameInput">Design name</label>
+            <input type="text" id="squareNameInput" placeholder="e.g. Sunset colorway">
+          </div>
+          <div>
+            <label for="squareNeededInput">Squares needed (optional)</label>
+            <input type="number" id="squareNeededInput" min="0" placeholder="e.g. 15">
+          </div>
+        </div>
       </div>
       <div class="square-editor">
         <div class="square-preview-wrap"><div class="granny-square square-preview" id="squarePreview"></div></div>
@@ -1157,7 +1167,7 @@
   const grannyResizeAddBtn = el('grannyResizeAddBtn'), grannyResizeRemoveBtn = el('grannyResizeRemoveBtn'), grannyResizeButtonsGroup = el('grannyResizeButtonsGroup');
   const grannyRowTopBtn = el('grannyRowTopBtn'), grannyRowBottomBtn = el('grannyRowBottomBtn'), grannyColLeftBtn = el('grannyColLeftBtn'), grannyColRightBtn = el('grannyColRightBtn');
   const squareModal = el('squareModal'), squareModalTitle = el('squareModalTitle'), squareModalCloseBtn = el('squareModalCloseBtn');
-  const squareNameInput = el('squareNameInput'), squarePreview = el('squarePreview'), roundList = el('roundList'), addRoundBtn = el('addRoundBtn');
+  const squareNameInput = el('squareNameInput'), squareNeededInput = el('squareNeededInput'), squarePreview = el('squarePreview'), roundList = el('roundList'), addRoundBtn = el('addRoundBtn');
   const deleteSquareDesignBtn = el('deleteSquareDesignBtn'), saveSquareDesignBtn = el('saveSquareDesignBtn');
 
   // ---------- letters for palette ----------
@@ -3242,6 +3252,7 @@
     grannyThumbnailDirty = true;
     renderPanelTabs();
     renderGrannyGrid();
+    renderDesignPalette(); // the deleted panel's cells no longer count toward the shared used/made totals
     scheduleGrannySave();
   }
 
@@ -3290,14 +3301,20 @@
       ? 'Tap ✎ on a design to edit its colours — or switch to 🎨 Edit colours mode below and tap a square in the blueprint.'
       : 'No square designs yet — tap "+ New square design" to choose rounds and colours, then stamp it onto the grid below.';
     designPalette.appendChild(hint);
-    const counts = {};
-    // "used" counts total across every panel, not just the one on screen — useful for yarn planning
-    granny.panels.forEach(pl => pl.layout.forEach(id => { if(id) counts[id] = (counts[id]||0) + 1; }));
+    const usedCounts = {}, madeCounts = {};
+    // both totals are across every panel, not just the one on screen — useful for yarn planning
+    granny.panels.forEach(pl => pl.layout.forEach((id, idx) => {
+      if(!id) return;
+      usedCounts[id] = (usedCounts[id]||0) + 1;
+      if(pl.completed[idx]) madeCounts[id] = (madeCounts[id]||0) + 1;
+    }));
 
     granny.designs.forEach(d => {
       const chip = document.createElement('div');
       chip.className = 'design-chip' + (granny.activeDesignId === d.id ? ' active' : '');
-      chip.dataset.designId = d.id; // lets updateDesignUsageCounts() find this chip's count without a full rebuild
+      chip.dataset.designId = d.id; // lets bumpDesignChip() find this chip without a full rebuild
+      chip.dataset.used = usedCounts[d.id] || 0;
+      chip.dataset.made = madeCounts[d.id] || 0;
       const sq = document.createElement('div');
       sq.className = 'granny-square';
       sq.style.width = '48px'; sq.style.height = '48px';
@@ -3309,8 +3326,11 @@
       chip.appendChild(nm);
       const ct = document.createElement('div');
       ct.className = 'chipcount';
-      ct.textContent = (counts[d.id] || 0) + ' used';
       chip.appendChild(ct);
+      const nd = document.createElement('div');
+      nd.className = 'chipneeded';
+      chip.appendChild(nd);
+      refreshChipCountEls(chip, d);
       const editBtn = document.createElement('button');
       editBtn.type = 'button';
       editBtn.className = 'chip-edit-btn';
@@ -3336,18 +3356,35 @@
   }
   grannyNewDesignBtn.addEventListener('click', () => openSquareModal(null));
 
-  // adjusts two chips' "N used" counts directly instead of recomputing counts for every design
+  // writes a chip's "N used" / "M of N made" text from its dataset counts — dataset stays the
+  // source of truth so repeated bumps never drift out of sync with re-parsed display text.
+  function refreshChipCountEls(chip, design){
+    const used = parseInt(chip.dataset.used, 10) || 0;
+    const made = parseInt(chip.dataset.made, 10) || 0;
+    const ct = chip.querySelector('.chipcount');
+    if(ct) ct.textContent = used + ' used';
+    const nd = chip.querySelector('.chipneeded');
+    if(nd){
+      if(design && design.needed){
+        nd.style.display = '';
+        nd.textContent = `${made}/${design.needed} made`;
+        nd.title = `${made} of ${design.needed} needed marked as made`;
+        nd.classList.toggle('complete', made >= design.needed);
+      } else {
+        nd.style.display = 'none';
+      }
+    }
+  }
+
+  // adjusts one chip's used/made counts directly instead of recomputing counts for every design
   // and rebuilding the whole palette — called on every single grid click, so it stays cheap.
-  function updateDesignUsageCounts(oldDesignId, newDesignId){
-    if(oldDesignId === newDesignId) return;
-    const bump = (designId, delta) => {
-      if(!designId) return;
-      const chip = designPalette.querySelector(`.design-chip[data-design-id="${designId}"] .chipcount`);
-      if(!chip) return; // design may since have been deleted
-      chip.textContent = Math.max(0, (parseInt(chip.textContent, 10) || 0) + delta) + ' used';
-    };
-    bump(oldDesignId, -1);
-    bump(newDesignId, 1);
+  function bumpDesignChip(designId, usedDelta, madeDelta){
+    if(!designId) return;
+    const chip = designPalette.querySelector(`.design-chip[data-design-id="${designId}"]`);
+    if(!chip) return; // design may since have been deleted
+    chip.dataset.used = Math.max(0, (parseInt(chip.dataset.used, 10) || 0) + usedDelta);
+    chip.dataset.made = Math.max(0, (parseInt(chip.dataset.made, 10) || 0) + madeDelta);
+    refreshChipCountEls(chip, granny.designs.find(d => d.id === designId));
   }
 
   // repaints only the blueprint cells that use a given design — used after editing a design's
@@ -3365,11 +3402,13 @@
       const d = granny.designs.find(x => x.id === editingDesignId);
       editingRounds = d.rounds.slice();
       squareNameInput.value = d.name || '';
+      squareNeededInput.value = d.needed || '';
       squareModalTitle.textContent = 'Edit square design';
       deleteSquareDesignBtn.style.display = 'inline-block';
     } else {
       editingRounds = DEFAULT_GRANNY_ROUNDS.slice();
       squareNameInput.value = '';
+      squareNeededInput.value = '';
       squareModalTitle.textContent = 'New square design';
       deleteSquareDesignBtn.style.display = 'none';
     }
@@ -3484,13 +3523,16 @@
   saveSquareDesignBtn.addEventListener('click', () => {
     if(!granny) return;
     const name = squareNameInput.value.trim() || ('Design ' + (granny.designs.length + 1));
+    const neededRaw = parseInt(squareNeededInput.value, 10);
+    const needed = Number.isFinite(neededRaw) && neededRaw > 0 ? neededRaw : null;
     const editedId = editingDesignId; // a new design isn't stamped anywhere yet, so no cells need repainting for it
     if(editingDesignId){
       const d = granny.designs.find(x => x.id === editingDesignId);
       d.name = name;
       d.rounds = editingRounds.slice();
+      d.needed = needed;
     } else {
-      const d = { id: generateId(), name, rounds: editingRounds.slice() };
+      const d = { id: generateId(), name, rounds: editingRounds.slice(), needed };
       granny.designs.push(d);
       granny.activeDesignId = d.id;
     }
@@ -3568,10 +3610,17 @@
     const panel = activePanel();
     if(grannyMode === 'place'){
       const oldDesignId = panel.layout[idx];
-      panel.layout[idx] = granny.activeDesignId;
+      const newDesignId = granny.activeDesignId;
+      const wasCompleted = !!panel.completed[idx];
+      panel.layout[idx] = newDesignId;
       panel.completed[idx] = 0; // placing/clearing a design resets that square's progress
       updateGrannyCell(idx);
-      updateDesignUsageCounts(oldDesignId, granny.activeDesignId); // patch just the two affected chip counts
+      if(oldDesignId !== newDesignId){
+        bumpDesignChip(oldDesignId, -1, wasCompleted ? -1 : 0); // losing this cell, and its "made" mark if it had one
+        bumpDesignChip(newDesignId, 1, 0); // gaining the cell, always unmade since completed just reset to 0
+      } else if(wasCompleted){
+        bumpDesignChip(oldDesignId, 0, -1); // re-stamping the same design still clears its "made" mark
+      }
       grannyThumbnailDirty = true;
     } else if(grannyMode === 'edit'){
       const designId = panel.layout[idx];
@@ -3579,11 +3628,13 @@
       openSquareModal(designId); // saving in the modal repaints affected cells and saves
       return;
     } else {
-      // "mark made" only tracks progress — it never changes which design occupies a cell,
-      // so the design palette and thumbnail (which don't reflect completion) stay untouched.
+      // "mark made" never changes which design occupies a cell (so "used" and the thumbnail are
+      // untouched), but it does move that design's "made" count toward its target, if it has one.
       if(!panel.layout[idx]){ showToast('Place a square design here first.', true); return; }
-      panel.completed[idx] = panel.completed[idx] ? 0 : 1;
+      const nowCompleted = panel.completed[idx] ? 0 : 1;
+      panel.completed[idx] = nowCompleted;
       updateGrannyCell(idx);
+      bumpDesignChip(panel.layout[idx], 0, nowCompleted ? 1 : -1);
     }
     renderGrannyProgress();
     scheduleGrannySave();
@@ -3644,6 +3695,7 @@
     panel.rows -= 1;
     grannyThumbnailDirty = true;
     renderGrannyGrid();
+    renderDesignPalette(); // the removed row may have carried cells counted toward a design's used/made totals
     scheduleGrannySave();
   }
   function grannyRemoveCol(position){
@@ -3655,6 +3707,7 @@
     panel.cols -= 1;
     grannyThumbnailDirty = true;
     renderGrannyGrid();
+    renderDesignPalette(); // the removed column may have carried cells counted toward a design's used/made totals
     scheduleGrannySave();
   }
 
