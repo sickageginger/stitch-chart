@@ -3076,8 +3076,8 @@
     }
     container.classList.remove('granny-square-empty');
     const n = rounds.length;
-    const band = 50 / n;
-    const gap = Math.min(1.6, band * 0.3);
+    const band = 50 / n; // each round gets an equal, fixed share of the radius — this budget must sum to 50 regardless of how many rounds there are
+    const reveal = Math.min(1.4, band * 0.25); // a small constant inward shrink per ring for the gap/seam look — NOT cumulative, or it eats the center alive as rounds increase
 
     const svg = document.createElementNS(SVG_NS, 'svg');
     svg.setAttribute('viewBox', '0 0 100 100');
@@ -3086,7 +3086,7 @@
 
     for(let r = n - 1; r >= 0; r--){ // outermost round first (painted underneath), innermost last (on top)
       const layer = n - 1 - r; // 0 = outermost
-      const inset = layer * band + layer * gap;
+      const inset = layer * band + reveal;
       const size = Math.max(2, 100 - inset * 2);
       const rect = document.createElementNS(SVG_NS, 'rect');
       rect.setAttribute('x', inset);
@@ -3723,10 +3723,10 @@
           }
           // same gapped/rounded-ring math as buildGrannyPreview(), by hand since canvas can't render the SVG directly
           const rounds = design.rounds, n = rounds.length;
-          const band = cellPx / 2 / n, gap = Math.min(0.5, band * 0.3);
+          const band = cellPx / 2 / n, reveal = Math.min(0.5, band * 0.25);
           for(let r = n - 1; r >= 0; r--){
             const layer = n - 1 - r;
-            const inset = layer * band + layer * gap;
+            const inset = layer * band + reveal;
             const size = Math.max(1, cellPx - 2 * inset);
             const radius = Math.min(size * 0.22, 3);
             ctx.fillStyle = rounds[r];
